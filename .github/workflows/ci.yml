@@ -32,7 +32,7 @@ env:
   SLUG: factory-commons
   IMAGE: coworld-factory-commons
   # Pins mirror the Dockerfile build stage; bump both together.
-  NIMBY_VERSION: "0.1.26"
+  NIMBY_VERSION: "0.1.27"
   NIM_VERSION: "2.2.4"
 
 jobs:
