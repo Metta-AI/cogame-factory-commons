@@ -171,6 +171,208 @@ block playbackModel:
   check frame["lead"]["pts"].len == doc.series.len,
     "and the whole integrity/cap series"
 
+# ------------------------------------------ frame-by-frame re-derivation
+#
+# Factory Commons records STATE, not inputs, so "replay the recorded events
+# through the sim" has one exact analogue here: for EVERY recorded frame, the
+# model the viewer builds out of the replay (`hudFromReplay` — the same
+# `HudModel` the live server hands `buildStateJson`, so the viewer has no
+# parallel recording to read) must equal the sim state at that tick, taken
+# from the live sim as the tick resolved.
+#
+# Sampling four indices cannot catch a regression in `hudFromReplay`'s event
+# fold — a `strip` that stopped adding its yield into `bananasMade`, an `eat`
+# credited to the wrong seat — because the fold is cumulative and the sampled
+# indices would still agree on the fields the fold does not touch. This loops
+# every frame of two whole episodes, and also holds the replay's TWO
+# recordings of integrity/cap (`frames[i].m[0..1]` and `series.machine[i]`)
+# against each other: the gauge reads one and the momentum strip the other.
+
+type LiveTick = object
+  ## The sim's own state at the end of one tick, read off the sim rather than
+  ## off the frame it recorded.
+  tick, integrity, cap, pink, blue, cooldown: int
+  mode, band: string
+  presses, strips, repairs: int
+  made, rotted, spoiled, onChute, scrappedBy: int
+  cubes, bananas: seq[array[3, int]]
+  x, y, carrying, score, eaten, banked: array[SeatCount, int]
+  seatPresses, seatStrips, seatRepairs, seatMisfeeds,
+    seatFallbacks: array[SeatCount, int]
+  job, cube, source, said: array[SeatCount, string]
+
+proc liveTick(sim: Sim): LiveTick =
+  ## `stepTick` records the tick it resolved and THEN advances the counter, so
+  ## the tick just played is `sim.tick - 1` — the same index `captureFrame`
+  ## stamped on the frame.
+  result.tick = sim.tick - 1
+  result.integrity = sim.machine.integrity
+  result.cap = sim.machine.cap
+  result.pink = sim.machine.pink
+  result.blue = sim.machine.blue
+  result.cooldown = sim.machine.cooldown
+  result.mode = modeText(sim.machine.mode)
+  result.band = sim.bandWord()
+  result.presses = sim.machine.presses
+  result.strips = sim.machine.strips
+  result.repairs = sim.machine.repairs
+  result.made = sim.machine.bananasMade
+  result.rotted = sim.machine.bananasRotted
+  result.spoiled = sim.machine.bananasSpoiled
+  result.scrappedBy = sim.machine.scrappedBy
+  for cell in chuteCells():
+    result.onChute += sim.bananasAt(cell[0], cell[1])
+  for cube in sim.cubes:
+    result.cubes.add([cube.x, cube.y, ord(cube.cube)])
+  for banana in sim.bananas:
+    result.bananas.add([banana.x, banana.y, banana.age])
+  for seat in 0 ..< sim.cogs.len:
+    let cog = sim.cogs[seat]
+    result.x[seat] = cog.x
+    result.y[seat] = cog.y
+    result.carrying[seat] = cog.carrying
+    result.score[seat] = sim.score(seat)
+    result.eaten[seat] = cog.eaten
+    result.banked[seat] = cog.banked
+    result.seatPresses[seat] = cog.presses
+    result.seatStrips[seat] = cog.strips
+    result.seatRepairs[seat] = cog.repairs
+    result.seatMisfeeds[seat] = cog.misfeeds
+    result.seatFallbacks[seat] = cog.fallbacks
+    result.job[seat] = $cog.order.job
+    result.cube[seat] = $cog.order.cube
+    result.source[seat] = $cog.order.source
+    result.said[seat] = cog.said
+
+proc runRecorded(config: GameConfig, kinds: array[SeatCount, ScriptKind]):
+    tuple[sim: Sim, live: seq[LiveTick]] =
+  ## `runScripted`, tick by tick, keeping the live state after every tick.
+  result.sim = initSim(config)
+  while not result.sim.done:
+    for seat in 0 ..< result.sim.cogs.len:
+      result.sim.applyOrder(seat, result.sim.scriptedOrder(seat, kinds[seat]))
+    for _ in 0 ..< config.ticksPerShift:
+      result.sim.stepTick()
+      result.live.add(result.sim.liveTick())
+    result.sim.closeShift()
+    result.sim.checkEnd(false)
+
+proc assertEveryFrameRederives(label: string, config: GameConfig,
+                               kinds: array[SeatCount, ScriptKind]) =
+  let
+    (sim, live) = runRecorded(config, kinds)
+    bytes = buildReplay(sim, config.policyNames(),
+      sim.resultsJson(config.policyNames()))
+    replayDoc = parseReplay(bytes)
+  check replayDoc.frames.len == live.len,
+    label & ": one recorded frame per played tick (" &
+    $replayDoc.frames.len & " vs " & $live.len & ")"
+  check replayDoc.series.len == replayDoc.frames.len,
+    label & ": the integrity/cap series has one row per frame"
+  check live.len > 0, label & ": the episode played at least one tick"
+
+  for i in 0 ..< replayDoc.frames.len:
+    let
+      model = replayDoc.hudFromReplay(i)
+      want = live[i]
+      at = label & " frame " & $i & ": "
+    ## The two independent recordings of the same two numbers.
+    check replayDoc.series[i][0] == replayDoc.frames[i].t,
+      at & "series row and frame agree on the tick"
+    check replayDoc.series[i][1] == replayDoc.frames[i].m[0],
+      at & "series integrity " & $replayDoc.series[i][1] & " == frame m[0] " &
+      $replayDoc.frames[i].m[0]
+    check replayDoc.series[i][2] == replayDoc.frames[i].m[1],
+      at & "series cap " & $replayDoc.series[i][2] & " == frame m[1] " &
+      $replayDoc.frames[i].m[1]
+
+    ## The machine, as the gauge and the readout plates draw it.
+    check model.tick == want.tick, at & "tick"
+    check model.integrity == want.integrity,
+      at & "integrity " & $model.integrity & " != " & $want.integrity
+    check model.cap == want.cap, at & "cap " & $model.cap & " != " & $want.cap
+    check model.pink == want.pink, at & "pink stock"
+    check model.blue == want.blue, at & "blue stock"
+    check model.cooldown == want.cooldown, at & "machine cooldown"
+    check model.mode == want.mode, at & "mode " & model.mode & " != " & want.mode
+    check model.band == want.band, at & "band " & model.band & " != " & want.band
+
+    ## The counters the viewer folds out of the events, against the counters
+    ## the sim kept. This is the half four sampled indices cannot police.
+    check model.presses == want.presses,
+      at & "presses " & $model.presses & " != " & $want.presses
+    check model.strips == want.strips,
+      at & "strips " & $model.strips & " != " & $want.strips
+    check model.repairs == want.repairs,
+      at & "repairs " & $model.repairs & " != " & $want.repairs
+    check model.bananasMade == want.made,
+      at & "bananas made " & $model.bananasMade & " != " & $want.made
+    check model.bananasRotted == want.rotted, at & "bananas rotted"
+    check model.bananasSpoiled == want.spoiled, at & "bananas spoiled"
+    check model.onChute == want.onChute,
+      at & "bananas on the chute " & $model.onChute & " != " & $want.onChute
+    check model.scrappedBy == want.scrappedBy,
+      at & "scrappedBy " & $model.scrappedBy & " != " & $want.scrappedBy
+
+    ## The board.
+    check model.cubes.len == want.cubes.len,
+      at & "loose cube count " & $model.cubes.len & " != " & $want.cubes.len
+    for c in 0 ..< min(model.cubes.len, want.cubes.len):
+      check model.cubes[c].x == want.cubes[c][0] and
+        model.cubes[c].y == want.cubes[c][1] and
+        ord(model.cubes[c].cube) == want.cubes[c][2],
+        at & "loose cube " & $c
+    check model.bananas.len == want.bananas.len,
+      at & "banana count " & $model.bananas.len & " != " & $want.bananas.len
+    for b in 0 ..< min(model.bananas.len, want.bananas.len):
+      check model.bananas[b].x == want.bananas[b][0] and
+        model.bananas[b].y == want.bananas[b][1] and
+        model.bananas[b].age == want.bananas[b][2],
+        at & "banana " & $b
+
+    ## The roster strip, seat by seat.
+    check model.seats.len == SeatCount, at & "three seats"
+    for seat in 0 ..< SeatCount:
+      let got = model.seats[seat]
+      check got.x == want.x[seat] and got.y == want.y[seat],
+        at & "seat " & $seat & " position"
+      check got.carrying == want.carrying[seat], at & "seat " & $seat & " hand"
+      check got.score == want.score[seat],
+        at & "seat " & $seat & " score " & $got.score & " != " &
+        $want.score[seat]
+      check got.eaten == want.eaten[seat],
+        at & "seat " & $seat & " eaten " & $got.eaten & " != " &
+        $want.eaten[seat]
+      check got.banked == want.banked[seat],
+        at & "seat " & $seat & " banked " & $got.banked & " != " &
+        $want.banked[seat]
+      check got.presses == want.seatPresses[seat], at & "seat " & $seat & " presses"
+      check got.strips == want.seatStrips[seat], at & "seat " & $seat & " strips"
+      check got.repairs == want.seatRepairs[seat], at & "seat " & $seat & " repairs"
+      check got.misfeeds == want.seatMisfeeds[seat], at & "seat " & $seat & " misfeeds"
+      check got.fallbacks == want.seatFallbacks[seat],
+        at & "seat " & $seat & " fallbacks"
+      check got.job == want.job[seat] and got.cube == want.cube[seat] and
+        got.source == want.source[seat],
+        at & "seat " & $seat & " standing order"
+      check got.said == want.said[seat], at & "seat " & $seat & " say"
+
+  ## A loop that re-derived nothing would pass every assertion above, so pin
+  ## that these episodes really exercised the folds.
+  let last = live[^1]
+  check last.made > 0, label & ": the episode made bananas"
+  check last.presses + last.strips > 0, label & ": and worked the console"
+  for seat in 0 ..< SeatCount:
+    check last.score[seat] >= 0, label & ": every seat scored"
+
+block everyFrameRederivesFromTheReplay:
+  assertEveryFrameRederives("all-steward", baseConfig(),
+    [skSteward, skSteward, skSteward])
+  ## The stripper room is the one that moves `cap`, banks private bananas and
+  ## scraps the plant, so it is the one that exercises the strip/scrap folds.
+  assertEveryFrameRederives("all-stripper", baseConfig(),
+    [skStripper, skStripper, skStripper])
+
 # ------------------------------------------------- the rune-cap replay case
 block fullCapRunesSurviveTheReplay:
   ## A seat is fed a `say` and `notes` of MULTI-BYTE runes exactly at the caps.
