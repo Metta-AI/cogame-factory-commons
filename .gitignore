@@ -1,0 +1,17 @@
+# Nim build products. nim.cfg is regenerated from the synced package tree on
+# every host (the committed one would pin the author's machine paths).
+nim.cfg
+nimcache/
+*.exe
+*.out
+
+# Local scratch and CI outputs.
+tmp/
+dist/
+replay-viewer/dist/
+__pycache__/
+*.pyc
+
+# Editor / OS noise.
+.DS_Store
+*.swp
