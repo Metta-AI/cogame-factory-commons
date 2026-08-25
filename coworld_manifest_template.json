@@ -614,6 +614,7 @@
       "shifts": 8,
       "ticksPerShift": 60,
       "eitherOr": false,
+      "capMin": 25,
       "minTurnSeconds": 0,
       "playerConnectTimeoutSeconds": 180,
       "players": [

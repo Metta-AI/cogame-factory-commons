@@ -6,7 +6,7 @@
 ## baseline that raises, or that quietly walks a cog into the machine body, is
 ## a broken game long before it is a bad player.
 
-import std/times
+import std/[json, times]
 
 import factory_commons/[sim, scripted]
 

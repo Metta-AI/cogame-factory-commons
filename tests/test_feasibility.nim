@@ -7,7 +7,7 @@
 ## constants, and the ladder in the note names the repair order for each gate —
 ## so a failure here is a tuning task with a written recipe, not a mystery.
 
-import std/[strutils, times]
+import std/[json, strutils, times]
 
 import factory_commons/[sim, scripted]
 

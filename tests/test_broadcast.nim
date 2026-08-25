@@ -42,21 +42,21 @@ proc policyNames(config: GameConfig): seq[string] =
     result.add(player.name)
 
 let config = baseConfig()
-var sim = initSim(config)
+var game = initSim(config)
 for _ in 0 ..< config.shifts:
-  for seat in 0 ..< sim.cogs.len:
-    var order = sim.scriptedOrder(seat, if seat == 2: skStripper else: skSteward)
-    order.say = "hopper 3/1 - somebody repair, we are at " & $sim.machine.integrity
-    sim.applyOrder(seat, order)
-  sim.playShift()
-  sim.checkEnd(false)
-sim.checkEnd(false)
-if not sim.done:
-  sim.endEarly()
+  for seat in 0 ..< game.cogs.len:
+    var order = game.scriptedOrder(seat, if seat == 2: skStripper else: skSteward)
+    order.say = "hopper 3/1 - somebody repair, we are at " & $game.machine.integrity
+    game.applyOrder(seat, order)
+  game.playShift()
+  game.checkEnd(false)
+game.checkEnd(false)
+if not game.done:
+  game.endEarly()
 
 let
-  results = sim.resultsJson(config.policyNames())
-  replayBytes = buildReplay(sim, config.policyNames(), results)
+  results = game.resultsJson(config.policyNames())
+  replayBytes = buildReplay(game, config.policyNames(), results)
   doc = parseReplay(replayBytes)
 
 proc frameAt(index: int, withLead = false): JsonNode =

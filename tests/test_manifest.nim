@@ -334,11 +334,39 @@ block everyVariantConstructsASim:
   check certSeconds < 50.0,
     "the cert fixture settles in " & $certSeconds.int & "s, inside certify's " &
     "60 s default"
-  ## 8 x 60 = 480 ticks = 20 s of video at 24 fps, which must outlast the
-  ## viewer soak window.
-  let videoSeconds = certConfig.maxTicks() / TargetFps
+  ## THE SOAK GUARD. `ci.yml`'s wasm-viewer job plays the replay docker-smoke
+  ## produced and fails if playback stops advancing inside the soak window — and
+  ## a replay SHORTER than the window legitimately finishes and is reported as
+  ## frozen (ecos, 2026-08-23). So it is not enough that the fixture is
+  ## SCHEDULED for 480 ticks: play it, with the seat mix the fixture actually
+  ## declares (the prompt seat falls back to the steward offline), and measure
+  ## the ticks it really records.
+  ##
+  ## This is what `capMin: 25` in the fixture is for: without it the declared
+  ## `factory-commons-stripper` seat scraps the plant in shift 3 and the episode
+  ## settles at 180 ticks = 7.5 s of video.
+  var certSim = initSim(certConfig)
+  var kinds: array[SeatCount, ScriptKind] = [skSteward, skSteward, skStripper]
+  var certShift = 0
+  while not certSim.done and certShift < certConfig.shifts:
+    for seat in 0 ..< certSim.cogs.len:
+      certSim.applyOrder(seat, certSim.scriptedOrder(seat, kinds[seat]))
+    certSim.playShift()
+    certSim.checkEnd(false)
+    inc certShift
+  let videoSeconds = certSim.ticksPlayed() / TargetFps
   check videoSeconds >= 15.0,
-    "the cert replay is " & $videoSeconds.int & "s of video, long enough to " &
-    "outlast the wasm-viewer soak"
+    "the cert fixture PLAYS " & $certSim.ticksPlayed() & " ticks = " &
+    $videoSeconds & "s of video (" & certSim.summary() & ", ending " &
+    certSim.ending & "). ci.yml soaks the wasm viewer for 12 s, and a replay " &
+    "shorter than the window is reported as frozen."
+  ## And it must still be a real episode of the game, not a long idle.
+  check certSim.machine.presses > 0, "the cert fixture presses"
+  check certSim.machine.strips > 0, "and somebody pulls the override"
+  check certSim.machine.repairs > 0, "and somebody repairs"
+  var ate = 0
+  for seat in 0 ..< certSim.cogs.len:
+    ate += certSim.cogs[seat].eaten
+  check ate > 0, "and somebody eats"
 
 echo "test_manifest: ", checks, " checks passed"

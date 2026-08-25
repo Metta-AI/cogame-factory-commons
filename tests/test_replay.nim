@@ -43,9 +43,9 @@ proc policyNames(config: GameConfig): seq[string] =
 # ---------------------------------------------------------------- the episode
 let
   config = baseConfig()
-  sim = runScripted(config, [skSteward, skSteward, skStripper])
-  results = sim.resultsJson(config.policyNames())
-  replayBytes = buildReplay(sim, config.policyNames(), results)
+  episode = runScripted(config, [skSteward, skSteward, skStripper])
+  results = episode.resultsJson(config.policyNames())
+  replayBytes = buildReplay(episode, config.policyNames(), results)
 
 block resultsShape:
   check results["scores"].len == SeatCount, "results.scores has one entry per seat"
@@ -101,10 +101,10 @@ block replayContents:
   for seat in 0 ..< SeatCount:
     check doc.names[seat] == Aliases[seat], "alias " & $seat
     check doc.colors[seat] == SeatColors[seat], "colour " & $seat
-  check doc.frames.len == sim.ticksPlayed(),
+  check doc.frames.len == episode.ticksPlayed(),
     "frames.len == ticksPlayed (" & $doc.frames.len & " vs " &
-    $sim.ticksPlayed() & ")"
-  check doc.series.len == sim.ticksPlayed(),
+    $episode.ticksPlayed() & ")"
+  check doc.series.len == episode.ticksPlayed(),
     "series.machine.len == ticksPlayed"
   for i, frame in doc.frames:
     check frame.t == i, "frame " & $i & " records tick " & $i
@@ -112,7 +112,7 @@ block replayContents:
     check frame.u.len mod 3 == 0, "the cube array is triples"
     check frame.b.len mod 3 == 0, "the banana array is triples"
   ## Every event tick inside the played range, and every kind declared.
-  validateEvents(doc.events, sim.ticksPlayed())
+  validateEvents(doc.events, episode.ticksPlayed())
   let counts = eventCounts(doc.events)
   for kind in ["grasp", "drop", "press", "fix", "eat"]:
     check counts.getOrDefault(kind) > 0,
@@ -175,8 +175,8 @@ block playbackModel:
 block fullCapRunesSurviveTheReplay:
   ## A seat is fed a `say` and `notes` of MULTI-BYTE runes exactly at the caps.
   ## Both must come back out of the replay bytes valid and inside the cap.
-  var config = baseConfig(shifts = 2)
-  var sim = initSim(config)
+  var fixtureConfig = baseConfig(shifts = 2)
+  var fixture = initSim(fixtureConfig)
   var say = ""
   var notes = ""
   ## Four-byte runes as well as two-byte ones, so a byte cut lands mid-sequence
@@ -200,18 +200,19 @@ block fullCapRunesSurviveTheReplay:
   check cleanedNotes.runeLen <= MaxNotesLen, "an over-cap notes is cut too"
   check validateUtf8(cleanedNotes) == -1, "on a rune boundary"
 
-  for _ in 0 ..< config.shifts:
-    for seat in 0 ..< sim.cogs.len:
-      var order = sim.scriptedOrder(seat, skSteward)
+  for _ in 0 ..< fixtureConfig.shifts:
+    for seat in 0 ..< fixture.cogs.len:
+      var order = fixture.scriptedOrder(seat, skSteward)
       order.say = cleanSay(overSay)
       order.notes = cleanNotes(notes)
       order.source = osLlm
-      sim.applyOrder(seat, order)
-    sim.playShift()
-    sim.checkEnd(false)
+      fixture.applyOrder(seat, order)
+    fixture.playShift()
+    fixture.checkEnd(false)
   let
-    fixtureResults = sim.resultsJson(config.policyNames())
-    fixtureBytes = buildReplay(sim, config.policyNames(), fixtureResults)
+    fixtureResults = fixture.resultsJson(fixtureConfig.policyNames())
+    fixtureBytes = buildReplay(fixture, fixtureConfig.policyNames(),
+      fixtureResults)
   check validateUtf8(fixtureBytes) == -1,
     "a replay carrying full-cap multi-byte strings is still strict UTF-8"
   let fixtureDoc = parseReplay(fixtureBytes)
@@ -228,7 +229,7 @@ block fullCapRunesSurviveTheReplay:
     check recordedNotes.runeLen <= MaxNotesLen,
       "the recorded notes is <= the cap, got " & $recordedNotes.runeLen
     inc sawSay
-  check sawSay == config.shifts * SeatCount,
+  check sawSay == fixtureConfig.shifts * SeatCount,
     "every seat's order was recorded with its strings"
 
 # ------------------------------------------------------- the all-stripper case
@@ -257,5 +258,5 @@ block allStripperRuinsTheFactory:
   check sawScrap, "and drops a `scrap` scrubber beat"
 
 echo "test_replay: ", checks, " checks passed (",
-  replayBytes.len, " replay bytes, ", sim.events.len, " events, ",
+  replayBytes.len, " replay bytes, ", episode.events.len, " events, ",
   doc.frames.len, " frames)"

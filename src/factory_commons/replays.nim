@@ -12,7 +12,7 @@
 ## series, the beat timeline, every event and the final results all live in
 ## these bytes. The viewer contacts no server except S3 for the file.
 
-import std/[json, strutils]
+import std/json
 
 import ./sim_types, ./sim_config, ./floor, ./machine, ./broadcast
 
