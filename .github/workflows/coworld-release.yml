@@ -352,13 +352,17 @@ jobs:
             echo "::error::ANTHROPIC_API_KEY secret is not set on this repo (dispatch propagate-secrets.yml in Metta-AI/coworld-builder)"
             exit 1
           fi
+          # The Coworld is named by the manifest's game.name (factory_commons),
+          # which is not the repo slug (factory-commons); using $SLUG here 404s.
+          coworld_name="$(python3 -c 'import json;print(json.load(open("dist/coworld_manifest.json"))["game"]["name"])')"
+          echo "coworld name: $coworld_name"
           secret_file="$(mktemp)"
           chmod 600 "$secret_file"
           printf '%s' "${ANTHROPIC_API_KEY}" > "$secret_file"
           uvx --from "$COWORLD_PKG" coworld secret put \
-            "$SLUG" "${SECRET_KEY_NAME}" "$secret_file"
+            "$coworld_name" "${SECRET_KEY_NAME}" "$secret_file"
           rm -f "$secret_file"
-          uvx --from "$COWORLD_PKG" coworld secret list "$SLUG"
+          uvx --from "$COWORLD_PKG" coworld secret list "$coworld_name"
           echo '{"ok": true}' > "$RR/secret.json"
 
       - name: Assemble release-result.json
