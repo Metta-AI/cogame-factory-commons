@@ -310,6 +310,63 @@ proc aRaisingTransportStillAnswersEverySeat() =
   check not client.disabled,
     "a raise is transient: the client is not disabled by it"
 
+proc aThrottledSeatWaitsForTheNextShift() =
+  ## design.md: "a 429 is logged and that seat is retried in the NEXT shift's
+  ## batch". Re-asking a rate limiter inside the same shift spends the
+  ## episode's request budget on a refusal, so the 429 seat takes the scripted
+  ## order for this shift — while a seat that merely answered badly is still
+  ## retried once, in the same batch it always was.
+  var sizes: seq[int]
+  proc stub(batch: RequestBatch): ResponseBatch {.gcsafe.} =
+    sizes.add(batch.len)
+    for i in 0 ..< batch.len:
+      var response: Response
+      ## Seat 0 is throttled; seats 1 and 2 answer with junk the first time.
+      if batch[i].verb == "POST" and i == 0 and sizes.len == 1:
+        response.code = 429
+        response.body = "{\"message\":\"Too many requests\"}"
+      elif sizes.len == 1:
+        response.code = 200
+        response.body = reply("not json at all")
+      else:
+        response.code = 200
+        response.body = reply("{\"job\":\"maintain\"}")
+      result.add((response, ""))
+  let config = baseConfig()
+  var sim = initSim(config)
+  let client = newStubLlmClient(config, stub)
+  let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
+    @[skNone, skNone, skNone])
+  check sizes.len == 2, "one batch and one retry batch, got " & $sizes.len
+  check sizes[0] == 3, "the first batch carries every open seat"
+  check sizes[1] == 2,
+    "the retry batch carries the two bad replies and NOT the throttled seat, " &
+    "got " & $sizes[1]
+  check orders[0].source == osFallback,
+    "the throttled seat plays the scripted steward this shift"
+  check orders[1].source == osRetry and orders[2].source == osRetry,
+    "and the two bad replies are still retried once"
+  check not client.disabled, "a 429 does not disable the client"
+
+proc allSeatsThrottledIssueNoRetryBatch() =
+  var batches = 0
+  proc stub(batch: RequestBatch): ResponseBatch {.gcsafe.} =
+    inc batches
+    for i in 0 ..< batch.len:
+      var response: Response
+      response.code = 429
+      response.body = "{\"message\":\"Too many requests\"}"
+      result.add((response, ""))
+  let config = baseConfig()
+  var sim = initSim(config)
+  let client = newStubLlmClient(config, stub)
+  let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
+    @[skNone, skNone, skNone])
+  check batches == 1,
+    "a fully throttled shift issues ONE batch, not two, got " & $batches
+  for order in orders:
+    check order.source == osFallback, "and every seat plays the steward"
+
 proc noCredentialsMeansEverySeatPlaysSteward() =
   ## The load-bearing offline path: `docker_smoke.sh` and `coworld certify` run
   ## with no key at all, and the episode must still finish deterministically.
@@ -354,6 +411,8 @@ invalidRepliesRetryOnceThenFallBack()
 halfValidRepliesRetryOnlyTheFailures()
 transportFailuresNeverRaise()
 aRaisingTransportStillAnswersEverySeat()
+aThrottledSeatWaitsForTheNextShift()
+allSeatsThrottledIssueNoRetryBatch()
 noCredentialsMeansEverySeatPlaysSteward()
 
 block promptsCarryTheContract:

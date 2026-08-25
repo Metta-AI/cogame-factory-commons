@@ -33,6 +33,11 @@ const
   BedrockAnthropicVersion = "bedrock-2023-05-31"
 
 type
+  ThrottledError* = object of FactoryError
+    ## A 429 from the API. Distinct from every other transport failure because
+    ## the design note answers it differently: the seat is retried in the NEXT
+    ## shift's batch, not in this shift's retry batch.
+
   LlmTransport* = enum
     ltNone, ltBedrock, ltAnthropic
 
@@ -635,7 +640,7 @@ proc textOf(client: LlmClient, response: Response, error, url: string): string =
     raise newException(FactoryError, "llm auth failed (" & $response.code &
       ") at " & url & ": " & cleanError(response.body))
   if response.code == 429:
-    raise newException(FactoryError, "llm throttled (429): " &
+    raise newException(ThrottledError, "llm throttled (429): " &
       cleanError(response.body))
   if response.code < 200 or response.code >= 300:
     raise newException(FactoryError, "llm error " & $response.code & ": " &
@@ -773,6 +778,16 @@ proc decideAll*(
         var order = parseOrder(extractJsonObject(text))
         order.source = if attempt == 0: osLlm else: osRetry
         result[index] = order
+      except ThrottledError as error:
+        ## design.md: "a 429 is logged and that seat is retried in the NEXT
+        ## shift's batch". Re-asking a rate limiter that just said no, in the
+        ## same second, spends the episode's request budget on a refusal — so
+        ## this seat takes the scripted order for this shift and comes back in
+        ## the next batch.
+        log "llm: seat " & $seat & " throttled, retrying next shift: " &
+          cleanError(error.msg)
+        result[index] = sim.scriptedOrder(seat, skSteward)
+        result[index].source = osFallback
       except CatchableError as error:
         log "llm: seat " & $seat & " attempt " & $attempt & " failed: " &
           cleanError(error.msg)
