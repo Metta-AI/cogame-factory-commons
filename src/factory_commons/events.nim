@@ -8,7 +8,7 @@
 ##
 ## Events never enter `gameHash`, so nothing here can affect determinism.
 
-import std/[json, strutils, tables]
+import std/[json, tables]
 
 import ./sim_types
 

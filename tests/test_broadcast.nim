@@ -7,7 +7,7 @@
 ## every scrubber beat — every static grep stays green and the markers render as
 ## unlabelled divs that never seek (tandem, 2026-08-23).
 
-import std/[json, os, sets, strutils]
+import std/[json, os, sets, strutils, tables]
 
 import factory_commons/[sim, scripted, broadcast, global, replays,
                         wire_constants]

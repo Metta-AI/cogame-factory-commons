@@ -7,7 +7,7 @@
 ## feeds a seat multi-byte runes exactly at the caps and then parses the bytes
 ## with `validateUtf8`.
 
-import std/[json, strutils, unicode]
+import std/[json, strutils, tables, unicode]
 
 import factory_commons/[sim, scripted, replays, events, llm, broadcast]
 

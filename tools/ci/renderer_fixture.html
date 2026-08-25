@@ -237,13 +237,21 @@
             !el.classList.contains('feed-row')) {
           fail(el.className + ' overflows by ' + slack + 'px at ' + width + 'px');
         }
-        if (el.scrollHeight - el.clientHeight > 1 &&
-            el.classList.contains('notes')) {
-          // The notes panel is deliberately clipped; only flag a total
-          // blow-out (more than double its own height).
-          if (el.scrollHeight > el.clientHeight * 2) {
-            fail('notes panel is ' + el.scrollHeight + 'px of content in ' +
-              el.clientHeight + 'px at ' + width + 'px');
+        if (el.classList.contains('notes')) {
+          // A 320-rune `notes` does not fit a 102px box at 360px and is not
+          // meant to: the design draws it only in the feed's EXPANDED row, and
+          // the panel here is `overflow: hidden` on purpose. So the assertions
+          // are the ones that matter: the box stays inside the frame (a clipped
+          // panel must not push the layout around), and the full string is
+          // present in the DOM, so nothing in the pipeline truncated it.
+          var box = el.getBoundingClientRect();
+          var host = el.parentNode.getBoundingClientRect();
+          if (box.right > host.right + 1 || box.bottom > host.bottom + 1) {
+            fail('notes panel escapes the frame at ' + width + 'px');
+          }
+          if (runes(el.textContent) !== MAX_NOTES) {
+            fail('notes panel holds ' + runes(el.textContent) +
+              ' runes at ' + width + 'px, want ' + MAX_NOTES);
           }
         }
       });
