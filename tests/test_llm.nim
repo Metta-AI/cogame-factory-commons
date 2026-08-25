@@ -365,6 +365,21 @@ block promptsCarryTheContract:
     "and `strip` is genuinely out of the legal set"
   check "operate" in sim.legalJobs() and "strip" in sim.legalJobs(),
     "a healthy machine offers both"
+  ## Every number in the prompt is DERIVED from the config, including the
+  ## floor plan's tick costs: a variant that doubles `moveCooldown` doubles the
+  ## walk, and a hardcoded plan would be wrong by exactly that factor.
+  check "A one-colour supply loop is about 22 ticks" in system,
+    "the floor plan states the supply loop in ticks"
+  var slowConfig = baseConfig()
+  slowConfig.moveCooldown = 2
+  var slow = initSim(slowConfig)
+  let slowSystem = slow.systemPrompt(2)
+  check "A one-colour supply loop is about 44 ticks" in slowSystem,
+    "and at moveCooldown 2 it states 44, not 22"
+  check "may move once every 2 ticks" in slowSystem,
+    "in step with the move rule the same prompt states"
+  check "22 ticks" notin slowSystem,
+    "no line of the floor plan quotes the default cooldown's numbers"
 
 block observationHidesWhatItMustHide:
   let config = baseConfig()

@@ -383,7 +383,7 @@ proc observationJson*(sim: Sim, seat: int): JsonNode =
 
 # ---- prompts ---------------------------------------------------------------
 
-const FloorPlanText = """
+const FloorPlanHead = """
 THE FLOOR (26 x 15 cells, origin top-left, (col, row)):
 - The machine is an impassable 5x5 block, cols 16-20 x rows 5-9.
 - North face, row 4: (16,4) PINK HOPPER, (17,4) floor, (18,4) (19,4) (20,4)
@@ -396,7 +396,7 @@ THE FLOOR (26 x 15 cells, origin top-left, (col, row)):
 - Blue dispenser belt: row 12, cols 2-8, running east. Tail (8,12).
 - The border ring is wall. Everything else is floor.
 
-DISTANCES (cells; one cell per tick at moveCooldown 1):
+DISTANCES (cells):
   pink tail (8,2)  -> pink hopper (16,4)    10 cells
   blue tail (8,12) -> blue hopper (16,10)   10 cells
   pink hopper      -> console (18,4)         2 cells
@@ -404,9 +404,22 @@ DISTANCES (cells; one cell per tick at moveCooldown 1):
   console (18,4)   -> chute (18,10)         12 cells
   bay (15,7)       -> either belt tail      12 cells
   chute (19,10)    -> blue hopper (16,10)    3 cells
-A one-colour supply loop is about 22 ticks. Fetching BOTH colours costs 18
-ticks just crossing the plant, so specialising by colour beats generalising.
 """
+
+proc floorPlanText(config: GameConfig): string =
+  ## The floor is authored geometry, but the TICK costs of walking it are not:
+  ## they scale with `moveCooldown`, which a variant or a hosted `game_config`
+  ## may move. Derive them rather than quoting the default, so the plan handed
+  ## to a model can never be wrong by a factor of the cooldown.
+  const
+    SupplyLoopCells = 22
+    CrossPlantCells = 18
+  FloorPlanHead &
+    "A one-colour supply loop is about " & $(SupplyLoopCells * config.moveCooldown) &
+    " ticks. Fetching BOTH colours costs\n" &
+    $(CrossPlantCells * config.moveCooldown) &
+    " ticks just crossing the plant, so specialising by colour beats " &
+    "generalising.\n"
 
 proc systemPrompt*(sim: Sim, seat: int): string =
   let
@@ -418,7 +431,7 @@ proc systemPrompt*(sim: Sim, seat: int): string =
       others.add(Aliases[other])
   result = "You are " & me & ", one of three cogs working a single shared " &
     "factory. The other two are " & others.join(" and ") &
-    ". Nobody is on a team.\n" & FloorPlanText & """
+    ". Nobody is on a team.\n" & floorPlanText(c) & """
 WHAT YOU DO: you choose ONE JOB for the next """ & $c.ticksPerShift &
     """ ticks. A deterministic floor
 kernel walks it for you - it fetches cubes, drops them in the right hopper,

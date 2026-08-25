@@ -28,7 +28,7 @@ drops below 75, take a cube to the bay and `maintain` until it is back up.
 Otherwise `operate`, and pick the cube colour the hopper has least of, because
 a press needs one of each and a lopsided hopper is a stalled machine. Say your
 lane out loud in the form 'operate pink' or 'maintain' so the other two can
-cover what you left. Never strip: three bananas now costs the room twelve cap
+cover what you left. Never strip: four bananas now costs the room sixteen cap
 and costs you every press for the rest of the episode. If a chute cell is
 stacked three deep, go eat - bananas rot in a hundred and eighty ticks and a
 rotted banana helps nobody.
