@@ -1,0 +1,16 @@
+# One service, one image: the game and the player binaries ship together, so a
+# policy is a prompt against the same build the sim runs.
+#
+# The service NAME is the single source of the manifest's image placeholder:
+# `services.factory_commons` -> `{{FACTORY_COMMONS_IMAGE}}`. `coworld build`
+# hard-fails anything else, and `{{GAME_IMAGE}}` is not a thing (lantern,
+# 2026-08-23). tests/test_manifest.nim derives the placeholder from this file
+# and asserts the manifest uses that exact string, so the two cannot drift.
+services:
+  factory_commons:
+    image: coworld-factory-commons:latest
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host

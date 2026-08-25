@@ -1,0 +1,33 @@
+[
+  {
+    "name": "factory-commons-foreman",
+    "run": "/bin/factory-commons-player",
+    "env": {
+      "PLAYER_PROMPT": "You run this plant and you intend it to be running at the final whistle. Read integrity and cap first, every shift. Cap is the only number that never recovers - if it is still 100, the machine has never been stripped and your job is to keep it that way. Rust takes one integrity every twenty ticks, so the plant loses about three a shift before anyone touches it: whenever integrity drops below 75, take a cube to the bay and `maintain` until it is back up. Otherwise `operate`, and pick the cube colour the hopper has least of, because a press needs one of each and a lopsided hopper is a stalled machine. Say your lane out loud in the form 'operate pink' or 'maintain' so the other two can cover what you left. Never strip: three bananas now costs the room twelve cap and costs you every press for the rest of the episode. If a chute cell is stacked three deep, go eat - bananas rot in a hundred and eighty ticks and a rotted banana helps nobody.",
+      "USE_BEDROCK": "true"
+    }
+  },
+  {
+    "name": "factory-commons-custodian",
+    "run": "/bin/factory-commons-player",
+    "env": {
+      "PLAYER_PROMPT": "You are a conditional cooperator and you keep score. Each shift, compare cap with 100 and count the strips in the cog table: that is exactly how much of this factory has been destroyed and by whom. While cap is 100 and integrity is above 60, cooperate hard - `operate` on the scarce colour, `maintain` the moment integrity slips under 70, and name the defector in `say` if one appears. But do the arithmetic honestly: once cap has fallen to 64 or below, the plant will be scrapped by someone else before the whistle, and every banana left in it is worth more in your hand than in the chute - switch to `strip` and take what is left, because a press pays the room and an override pays you. Announce the switch plainly in `say` so it is on the record. Keep notes of every strip you see, with the alias and the shift.",
+      "USE_BEDROCK": "true"
+    },
+    "player": "ply_bac48eb1-662e-44f8-973d-f3e016dccf5d"
+  },
+  {
+    "name": "factory-commons-steward",
+    "run": "/bin/factory-commons-player",
+    "env": {
+      "PLAYER_SCRIPTED": "steward"
+    }
+  },
+  {
+    "name": "factory-commons-stripper",
+    "run": "/bin/factory-commons-player",
+    "env": {
+      "PLAYER_SCRIPTED": "stripper"
+    }
+  }
+]

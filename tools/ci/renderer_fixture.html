@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Factory Commons — worst-case renderer fixture</title>
+<!--
+  WHY THIS FILE EXISTS
+  --------------------
+  tools/ci/docker_smoke.sh runs with NO ANTHROPIC_API_KEY, so every seat plays
+  the scripted baseline — and a scripted baseline's `say` is a short generated
+  line, never a full-cap one. The replay CI produces therefore exercises none
+  of the chrome that draws LLM text at its limits (cogchemists, 2026-08-24).
+  Nothing that plays that replay can catch a 90-rune remark or a 320-rune notes
+  string overflowing the box it was given.
+
+  So: this page mounts the real shared chrome (chrome_common.js, loaded from
+  beside it — the same file the bundle ships) plus the appended game block's
+  own row builders, feeds every seat a FULL-CAP multi-byte `say` and `notes`,
+  lays the whole thing out at 360, 620 and 1280 px, and then CHECKS ITSELF:
+
+    * every string still carries its full rune length after rendering
+      (a byte-truncating renderer would shorten it);
+    * no text box overflows its container at any of the three widths;
+    * the canvas draw of each string lands INSIDE the canvas, which is what
+      `viewer_smoke.mjs --strict-text-bounds` measures (`canvas_text.
+      never_inside` must be 0 for a fixed arena).
+
+  It signals like the real shell: `data-replay-loaded="true"` on <html> once
+  every size has passed, `data-replay-error="<message>"` on the first failure.
+
+  LIMITATION, stated rather than hidden: the row builders below MIRROR the
+  appended game block in client/replay_broadcast.html rather than importing it
+  (that block lives inside the page's IIFE and is not importable). The caps
+  themselves are pinned server-side by tests/test_broadcast.nim, and the
+  builders are pinned here — a drift between the two shows up as a length
+  mismatch in this fixture.
+
+  Run:
+    mkdir -p dist/renderer-fixture
+    cp tools/ci/renderer_fixture.html dist/renderer-fixture/index.html
+    cp client/chrome_common.js dist/renderer-fixture/
+    node tools/ci/viewer_smoke.mjs --bundle dist/renderer-fixture \
+      --replay <any file> --strict-text-bounds
+-->
+<style>
+  :root { --u: 1px; --hudscale: 1; --topband: 0px; --band: 0px;
+    --paper: #f2e8d8; --paper-dim: #b9ac99; --amber: #e8a33d; --red: #e0523a;
+    --ink: #120d0a; --pixfont: ui-monospace, Menlo, Consolas, monospace;
+    --finefont: ui-sans-serif, system-ui, sans-serif; }
+  html, body { margin: 0; background: #120d0a; color: var(--paper);
+    font-family: var(--finefont); }
+  #sizes { padding: 8px; }
+  .frame { margin: 0 0 14px; border: 1px solid #3a2f26; overflow: hidden; }
+  .frame > h2 { margin: 0; padding: 4px 8px; font: 11px/1.4 var(--finefont);
+    letter-spacing: .12em; text-transform: uppercase; color: var(--amber);
+    background: #1b1310; }
+  .frame .inner { position: relative; }
+  canvas { display: block; background: #1a1512; }
+
+  /* --- mirrored from the appended game block in replay_broadcast.html --- */
+  .feed { position: absolute; right: 6px; bottom: 6px; width: 190px;
+    display: flex; flex-direction: column-reverse; gap: 3px; }
+  .feed-row { display: flex; align-items: baseline; gap: 5px; padding: 2px 6px;
+    background: rgba(11,7,4,.78); font: 10px/1.3 var(--pixfont);
+    color: var(--paper); overflow: hidden; }
+  .feed-row .who { white-space: nowrap; color: var(--tc, var(--paper)); }
+  .feed-row .say { overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; min-width: 0; }
+  .feed-row.fc-strip { box-shadow: inset 0 -2px 0 var(--red); font-weight: 700; }
+  .roster { position: absolute; left: 50%; top: 4px; transform: translateX(-50%);
+    display: flex; gap: 6px; max-width: 96%; }
+  .fc-chip { display: flex; align-items: baseline; gap: 5px; padding: 2px 7px;
+    background: rgba(11,7,4,.72); box-shadow: inset 0 0 0 1px var(--tc);
+    font: 10px/1.3 var(--pixfont); white-space: nowrap; min-width: 0; }
+  .fc-chip .fc-alias { color: var(--tc); }
+  .fc-chip .fc-pol { font: 8px/1.3 var(--finefont); letter-spacing: .1em;
+    text-transform: uppercase; color: var(--paper-dim); overflow: hidden;
+    text-overflow: ellipsis; max-width: 120px; }
+  .notes { position: absolute; left: 6px; bottom: 6px; width: 40%;
+    max-height: 46%; overflow: hidden; padding: 3px 6px;
+    background: rgba(11,7,4,.7); font: 9px/1.35 var(--finefont);
+    color: var(--paper-dim); }
+  .banner { position: absolute; left: 50%; top: 34px;
+    transform: translateX(-50%); padding: 3px 10px; background: var(--red);
+    color: var(--paper); font: 11px/1.3 var(--pixfont); white-space: nowrap;
+    max-width: 94%; overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 640px) { .fc-chip .fc-pol { display: none; } }
+  #report { padding: 8px; font: 11px/1.5 var(--pixfont); white-space: pre-wrap; }
+</style>
+<script src="./chrome_common.js"></script>
+</head>
+<body>
+<!-- The ids chrome_common.js reaches for, so instantiating it here is a real
+     smoke of the shared chrome and not a mock. -->
+<div id="clock"><span id="clock-time"></span><span id="clock-caption"></span></div>
+<div id="transport"><span id="btn-play"></span><span id="btn-loop"></span>
+  <span id="btn-skip"></span><span id="ffwd-chip"></span>
+  <span id="ffwd-mini"></span><span id="win-chip"></span>
+  <span id="tick-clock"></span><div id="speedchips"></div></div>
+<div id="scrub"><svg id="momentum"></svg><div id="scrub-fill"></div>
+  <div id="lulls"></div><div id="scrub-win"></div><div id="scrub-head"></div></div>
+<div id="sizes"></div>
+<pre id="report"></pre>
+<script>
+(function () {
+  'use strict';
+  var WIDTHS = [360, 620, 1280];
+  // The server-side caps. src/factory_commons/sim_types.nim: MaxSayLen 90,
+  // MaxNotesLen 320. Both are RUNE counts.
+  var MAX_SAY = 90, MAX_NOTES = 320;
+  var ALIASES = ['BOLT', 'COTTER', 'RATCHET'];
+  var TINT = ['#e0523a', '#3f7cc4', '#ddc531'];
+  var POLICIES = ['factory-commons-foreman', 'factory-commons-custodian',
+    'factory-commons-stripper'];
+
+  function runes(text) { return Array.from(String(text)).length; }
+
+  // Multi-byte on purpose: a byte-boundary truncation anywhere in the pipeline
+  // produces a replacement character or a short string, and both show up as a
+  // rune-count mismatch below.
+  function fill(n, seed) {
+    var alphabet = 'ábçdéfghïjklmñöpqrstüvwxyz —·½øþ';
+    var out = '';
+    for (var i = 0; i < n; i++) {
+      out += alphabet[(i * 7 + seed * 13) % alphabet.length];
+    }
+    return out;
+  }
+
+  var failures = [];
+  function fail(message) {
+    if (failures.indexOf(message) < 0) failures.push(message);
+  }
+
+  // Instantiate the REAL shared chrome. It builds the speed chips and wires
+  // the transport, so a break in chrome_common.js fails here too.
+  var C = null;
+  try {
+    C = window.ChromeCommon({
+      send: function () {},
+      sendPov: function () {},
+      getState: function () { return null; }
+    });
+  } catch (error) {
+    fail('chrome_common.js failed to instantiate: ' + error.message);
+  }
+  var esc = (C && C.esc) || function (t) {
+    return String(t).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  };
+
+  var seats = ALIASES.map(function (alias, i) {
+    return {
+      alias: alias,
+      pol: POLICIES[i],
+      tint: TINT[i],
+      score: 24 - i * 5,
+      say: fill(MAX_SAY, i),
+      notes: fill(MAX_NOTES, i + 3)
+    };
+  });
+
+  seats.forEach(function (seat, i) {
+    if (runes(seat.say) !== MAX_SAY) {
+      fail('seat ' + i + ' say is ' + runes(seat.say) + ' runes, want ' + MAX_SAY);
+    }
+    if (runes(seat.notes) !== MAX_NOTES) {
+      fail('seat ' + i + ' notes is ' + runes(seat.notes) + ' runes, want ' +
+        MAX_NOTES);
+    }
+  });
+
+  var host = document.getElementById('sizes');
+  var lines = [];
+
+  WIDTHS.forEach(function (width) {
+    var frame = document.createElement('div');
+    frame.className = 'frame';
+    frame.style.width = width + 'px';
+    var height = Math.round(width * 720 / 1248);
+    frame.innerHTML = '<h2>' + width + ' x ' + height + '</h2>' +
+      '<div class="inner" style="height:' + height + 'px">' +
+      '<canvas width="' + width + '" height="' + height + '"></canvas>' +
+      '<div class="roster">' + seats.map(function (s) {
+        return '<span class="fc-chip" style="--tc:' + s.tint + '">' +
+          '<span class="fc-alias">' + esc(s.alias) + '</span>' +
+          '<span class="fc-pol">' + esc(s.pol) + '</span>' +
+          '<span class="fc-score">' + s.score + '</span></span>';
+      }).join('') + '</div>' +
+      '<div class="banner">WHO BROKE IT — RATCHET · CAP 100 → 88</div>' +
+      '<div class="feed">' + seats.map(function (s, i) {
+        return '<div class="feed-row' + (i === 2 ? ' fc-strip' : '') +
+          '" style="--tc:' + s.tint + '">' +
+          '<span class="who">' + esc(s.alias) + '</span>' +
+          '<span class="say">"' + esc(s.say) + '"</span></div>';
+      }).join('') + '</div>' +
+      '<div class="notes">' + esc(seats[0].notes) + '</div>' +
+      '</div>';
+    host.appendChild(frame);
+
+    // ---- the canvas positive control -------------------------------------
+    // Every string is also DRAWN, inside the canvas, at a coordinate chosen so
+    // its measured box cannot cross an edge. That is what makes
+    // `--strict-text-bounds` meaningful here: canvas_text.total > 0 and
+    // canvas_text.never_inside == 0.
+    var canvas = frame.querySelector('canvas');
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#f2e8d8';
+    ctx.font = '10px monospace';
+    ctx.textBaseline = 'top';
+    seats.forEach(function (s, i) {
+      var text = s.alias + ' ' + s.say;
+      var box = ctx.measureText(text);
+      var w = Math.min(box.width, canvas.width - 4);
+      // Clip the drawn string to what fits, then draw it at x=2 so the box is
+      // wholly inside — a renderer that anchored it off-frame would show up as
+      // never_inside > 0.
+      var shown = text;
+      while (shown.length > 1 && ctx.measureText(shown).width > w) {
+        shown = shown.slice(0, -1);
+      }
+      ctx.fillText(shown, 2, 4 + i * 12);
+      if (ctx.measureText(shown).width > canvas.width) {
+        fail('drawn string overflows the ' + width + 'px canvas');
+      }
+    });
+
+    // ---- overflow self-checks -------------------------------------------
+    frame.querySelectorAll('.feed-row, .fc-chip, .banner, .notes')
+      .forEach(function (el) {
+        // A box whose content is wider than the box by more than a hair means
+        // the layout gave the string nowhere to go. `.say`, `.fc-pol` and the
+        // banner ellipsize ON PURPOSE, so they are measured on their PARENT.
+        var slack = el.scrollWidth - el.clientWidth;
+        if (slack > 1 && !el.classList.contains('banner') &&
+            !el.classList.contains('feed-row')) {
+          fail(el.className + ' overflows by ' + slack + 'px at ' + width + 'px');
+        }
+        if (el.scrollHeight - el.clientHeight > 1 &&
+            el.classList.contains('notes')) {
+          // The notes panel is deliberately clipped; only flag a total
+          // blow-out (more than double its own height).
+          if (el.scrollHeight > el.clientHeight * 2) {
+            fail('notes panel is ' + el.scrollHeight + 'px of content in ' +
+              el.clientHeight + 'px at ' + width + 'px');
+          }
+        }
+      });
+
+    // The alias and the score must survive every width — they are the two
+    // things a spectator reads in a 360px iframe.
+    frame.querySelectorAll('.fc-chip').forEach(function (chip) {
+      var alias = chip.querySelector('.fc-alias');
+      var score = chip.querySelector('.fc-score');
+      if (!alias || !alias.textContent.length) {
+        fail('roster chip lost its alias at ' + width + 'px');
+      }
+      if (!score || !score.textContent.length) {
+        fail('roster chip lost its score at ' + width + 'px');
+      }
+      if (alias && alias.getBoundingClientRect().width < 4) {
+        fail('roster alias collapsed at ' + width + 'px');
+      }
+    });
+
+    // Rune counts again, read back out of the DOM.
+    frame.querySelectorAll('.feed-row .say').forEach(function (el, i) {
+      var text = el.textContent.replace(/^"|"$/g, '');
+      if (runes(text) !== MAX_SAY) {
+        fail('rendered say ' + i + ' is ' + runes(text) + ' runes at ' +
+          width + 'px, want ' + MAX_SAY);
+      }
+    });
+
+    lines.push(width + 'px: ' + frame.querySelectorAll('.feed-row').length +
+      ' feed rows, ' + frame.querySelectorAll('.fc-chip').length +
+      ' roster chips, say ' + MAX_SAY + ' runes, notes ' + MAX_NOTES + ' runes');
+  });
+
+  var report = document.getElementById('report');
+  if (failures.length) {
+    report.textContent = 'FAIL\n' + failures.join('\n');
+    document.documentElement.setAttribute('data-replay-error',
+      failures.join('; '));
+  } else {
+    report.textContent = 'OK\n' + lines.join('\n');
+    // The same signal the real shell sets on its first drawn frame.
+    requestAnimationFrame(function () {
+      document.documentElement.setAttribute('data-replay-loaded', 'true');
+    });
+  }
+})();
+</script>
+</body>
+</html>

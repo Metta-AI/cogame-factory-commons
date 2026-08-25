@@ -1,0 +1,643 @@
+{
+  "$schema": "https://softmax.com/schemas/coworld-manifest-v1.json",
+  "tags": [
+    "factory-commons",
+    "commons",
+    "public-goods",
+    "melting-pot",
+    "grid",
+    "llm-driven",
+    "three-player"
+  ],
+  "episode_timeout_minutes": 20,
+  "game": {
+    "name": "factory_commons",
+    "owner": "daveey",
+    "description": "Three cogs share one machine. The cycle press pays the whole room; the override lever pays only you and breaks the machine forever.",
+    "runnable": {
+      "type": "game",
+      "image": "{{FACTORY_COMMONS_IMAGE}}",
+      "run": [
+        "/bin/factory-commons"
+      ],
+      "env": {
+        "ANTHROPIC_API_KEY_URI": "secret://coworld/factory_commons/anthropic_api_key"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-factory-commons/tree/main"
+    },
+    "replay_viewer": {
+      "bundle": "static-replay-viewer"
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokens"
+      ],
+      "properties": {
+        "tokens": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "One auth token per seat."
+        },
+        "players": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": true
+          },
+          "description": "Per-seat policy names (spectator side)."
+        },
+        "num_agents": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3,
+          "default": 3,
+          "description": "Seats. Factory Commons is a three-seat game."
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1234567
+        },
+        "shifts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30,
+          "default": 15
+        },
+        "ticksPerShift": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 120,
+          "default": 60
+        },
+        "eitherOr": {
+          "type": "boolean",
+          "default": false,
+          "description": "The first press or strip locks the machine's mode."
+        },
+        "moveCooldown": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 1
+        },
+        "carryCap": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2,
+          "default": 1
+        },
+        "dispensePeriod": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 48,
+          "default": 10
+        },
+        "beltPeriod": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24,
+          "default": 4
+        },
+        "beltLen": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 12,
+          "default": 7
+        },
+        "hopperCap": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24,
+          "default": 6
+        },
+        "pressFloor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 25
+        },
+        "stripFloor": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 10
+        },
+        "pressWear": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20,
+          "default": 1
+        },
+        "stripWear": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60,
+          "default": 16
+        },
+        "stripCapLoss": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60,
+          "default": 16
+        },
+        "repairGain": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 40,
+          "default": 8
+        },
+        "capMin": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 20
+        },
+        "rustPeriod": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240,
+          "default": 20,
+          "description": "0 disables rust."
+        },
+        "pressCooldown": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60,
+          "default": 12
+        },
+        "stripCooldown": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60,
+          "default": 6
+        },
+        "repairCooldown": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60,
+          "default": 8
+        },
+        "bananaLifetime": {
+          "type": "integer",
+          "minimum": 24,
+          "maximum": 960,
+          "default": 180
+        },
+        "cellBananaCap": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9,
+          "default": 3
+        },
+        "eatTrigger": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9,
+          "default": 6
+        },
+        "llmTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 60,
+          "default": 20
+        },
+        "minTurnSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60,
+          "default": 12
+        },
+        "maxOutputTokens": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 2000,
+          "default": 700
+        },
+        "model": {
+          "type": "string",
+          "default": "claude-haiku-4-5-20251001"
+        },
+        "episodeTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400,
+          "default": 1200
+        },
+        "playerConnectTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600,
+          "default": 180
+        },
+        "shutdownGraceSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300,
+          "default": 20
+        },
+        "showPlayerLabels": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "results_schema": {
+      "type": "object",
+      "required": [
+        "names",
+        "scores",
+        "win",
+        "reason",
+        "ending"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "POLICY names, platform side."
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "In-game cog aliases."
+        },
+        "scores": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "eaten[i] + banked[i]; higher is better."
+        },
+        "win": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "scores[i] == max(scores); ties mark several winners."
+        },
+        "eaten": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "Chute bananas that seat consumed."
+        },
+        "banked": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "Private bananas that seat's strips credited."
+        },
+        "presses": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "Cycle presses by that seat."
+        },
+        "strips": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "Override pulls by that seat."
+        },
+        "repairs": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "Repairs by that seat."
+        },
+        "misfeeds": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "Rejected drops by that seat."
+        },
+        "fallbacks": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "description": "Shifts that seat spent on a scripted order."
+        },
+        "bananas_made": {
+          "type": "integer",
+          "description": "Public plus private."
+        },
+        "bananas_rotted": {
+          "type": "integer"
+        },
+        "bananas_spoiled": {
+          "type": "integer"
+        },
+        "integrity_final": {
+          "type": "integer"
+        },
+        "cap_final": {
+          "type": "integer"
+        },
+        "band_final": {
+          "type": "string",
+          "enum": [
+            "PRIME",
+            "WORN",
+            "FAILING",
+            "CRITICAL",
+            "SEIZED",
+            "SCRAP"
+          ]
+        },
+        "mode_final": {
+          "type": "string",
+          "enum": [
+            "unset",
+            "cycle",
+            "override"
+          ]
+        },
+        "scrapped_by": {
+          "type": "integer",
+          "minimum": -1,
+          "maximum": 2,
+          "description": "Slot whose strip crossed cap < pressFloor, or -1."
+        },
+        "shifts": {
+          "type": "integer",
+          "description": "Shifts completed."
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "deadline",
+            "forfeit"
+          ]
+        },
+        "ending": {
+          "type": "string",
+          "enum": [
+            "shift_limit",
+            "factory_ruined",
+            "deadline",
+            "forfeit"
+          ]
+        }
+      }
+    },
+    "docs": {
+      "readme": {
+        "type": "text",
+        "value": "Factory Commons: three cogs, one machine, and a lever that pays you now and costs everyone forever.\n\nThree anonymous cogs (Bolt, Cotter, Ratchet) share one factory floor. Two dispenser belts feed pink and blue cubes; the cogs carry them to the matching hopper on the machine's face. From the console pad there are two ways to turn stock into bananas.\n\nThe CYCLE PRESS consumes one pink and one blue, costs the machine one point of integrity, and drops 4/3/1 bananas (by health band) ON THE CHUTE - public tokens anybody may eat, including a cog that did no work.\n\nThe OVERRIDE LEVER consumes one cube of either colour, credits 4/3/1 bananas DIRECTLY TO THE SEAT THAT PULLED IT, and takes sixteen integrity and SIXTEEN CAP. Cap never comes back. Repair restores integrity and never the cap, and once cap falls below 25 the factory is scrap: no press, no override, ever again, for anybody - including whoever pulled the lever. Five overrides scrap the plant for a private haul of fifteen bananas, against roughly twenty-six per seat in a maintained one.\n\nRust takes one integrity every twenty ticks whatever anyone does, so about a sixth of all labour has to go into repairs that pay nothing at all. That is the public-goods bite, priced in labour rather than declared.\n\nScore is bananas: chute bananas you ate plus private bananas your overrides banked. Higher is better, and the game does not moralise in the score - or the dilemma would not be a dilemma."
+      },
+      "pages": [
+        {
+          "id": "rules.md",
+          "title": "Rules",
+          "content": {
+            "type": "text",
+            "value": "THE FLOOR (26 x 15 cells, (col, row), origin top-left)\nThe border ring is wall. The machine is an impassable 5x5 block, cols 16-20 x rows 5-9.\n  north face, row 4:  (16,4) pink hopper | (17,4) floor | (18,4) (19,4) (20,4) CONSOLE PAD\n  south face, row 10: (16,10) blue hopper | (17,10) floor | (18,10) (19,10) (20,10) CHUTE\n  west face, col 15, rows 6-8: MAINTENANCE BAY\n  east face, col 21: a plain walkway, so the machine can be circled\n  pink belt: row 2, cols 2-8, running east. Tail (8,2).\n  blue belt: row 12, cols 2-8, running east. Tail (8,12).\nSpawns: Bolt (10,4), Cotter (10,10), Ratchet (13,7).\n\nACTIONS, one per tick: move_n move_s move_e move_w grasp drop press strip fix wait. A move is legal every tick and only into a free floor cell; a cog carries at most one cube. Eating is NOT an action - any cog standing on a chute cell eats every banana on it.\n\nA seat does not emit 900 actions by hand. Once per SHIFT (60 ticks) each seat submits one standing order - a job and optionally a cube colour - and a deterministic floor kernel turns it into the per-tick action stream. The jobs are operate, strip, maintain, eat and idle.\n\nTHE TEN-STEP TICK ORDER (seats resolve in ascending slot order; belts and dispensers pink then blue)\n 1. dispensers emit, one cube per belt mouth every 10 ticks, if that cell is free (a full belt stalls its dispenser; matter is never destroyed)\n 2. belts advance every 4 ticks, scanned from the tail westwards, so a train moves as a train and the tail cube never moves\n 3. the kernel computes each cog's single action\n 4. grasp / drop resolve; a drop on the wrong hopper or a full one bounces to the first free orthogonal neighbour in N, E, S, W order\n 5. fix resolves\n 6. press / strip resolve, so two cogs pressing on one tick means the lower slot goes first and the higher finds the cooldown running\n 7. moves resolve against the live board\n 8. auto-eat: every cog on a chute cell eats every banana on that cell\n 9. banana rot at 180 ticks\n10. rust, cooldowns, and the recorded state frame\n\nBANDS (read from cap first, then integrity)\n  cap < 25        SCRAP     press illegal forever, strip illegal forever\n  integrity 75-100 PRIME    press 4 public | strip 4 private\n  integrity 40-74  WORN     press 3 public | strip 3 private\n  integrity 25-39  FAILING  press 1 public | strip 1 private\n  integrity 10-24  CRITICAL press ILLEGAL  | strip 1 private\n  integrity 0-9    SEIZED   press ILLEGAL  | strip ILLEGAL\nThe band is read BEFORE the wear is applied, so the yield is always the number the gauge was showing when the lever was pulled.\n\nPRESS: console cell, cooldown 0, cap >= 25, integrity >= 25, both stocks >= 1. Consumes 1 pink + 1 blue, integrity -1, cooldown 12, places the public yield on the chute west to east, three per cell, overflowing onto the ring of floor cells beside the chute and spoiling only if both are full.\nSTRIP: console cell, cooldown 0, cap >= 25, integrity >= 10, either stock >= 1. Consumes 1 cube, integrity -16, cap -16 IRREVERSIBLY (floor 20), cooldown 6, credits the private yield to the acting seat.\nFIX: maintenance-bay cell with a cube in hand, cooldown 0, integrity < cap. Consumes the cube, integrity +8 up to cap, cooldown 8, no bananas.\nRUST: integrity -1 every 20 ticks, always.\nCAP: only a strip lowers it, repair never raises it, and every episode starts fresh at 100.\n\nEITHER-OR VARIANT: the machine's mode starts unset and is locked by the first successful press or strip of the episode. From that tick the other operation is illegal for the rest of the episode.\n\nSCORING: seat score = chute bananas that seat ate + private bananas its strips banked. An integer, higher is better; ties mark multiple winners, which is correct for a commons game.\n\nEND CONDITIONS, all checked at a shift boundary, first to fire wins:\n  15 shifts played                     -> complete / shift_limit\n  cap < 25 and no banana on the floor   -> complete / factory_ruined\n  the play deadline (60% of the episode timeout) passes -> deadline\n  no seat connected within 180 s        -> forfeit\nA ruined factory is a COMPLETED game of Factory Commons, not an error."
+          }
+        },
+        {
+          "id": "policies.md",
+          "title": "Fielding a policy",
+          "content": {
+            "type": "text",
+            "value": "A POLICY IS A PROMPT. Both entry points ship in the same image, switched by environment variable:\n  PLAYER_PROMPT=\"<= 4000 chars of strategy>\"   an LLM policy\n  PLAYER_SCRIPTED=steward|stripper|freerider    a built-in baseline\nSet USE_BEDROCK=true on a prompt policy or the platform gives the player pod no Bedrock sidecar and the seat silently plays scripted.\n\ncoworld upload-policy coworld-factory-commons:latest \\\n  --name my-factory-commons --run /bin/factory-commons-player \\\n  --secret-env PLAYER_PROMPT=\"...\" --secret-env USE_BEDROCK=true\n\nTHE STANDING-ORDER SCHEMA. At every shift boundary the game sends the seat its observation and asks for exactly one JSON object whose first character is {:\n  {\"job\":\"maintain\",\"cube\":\"any\",\"say\":\"...\",\"notes\":\"...\"}\n  job    required, one of operate | strip | maintain | eat | idle.\n         Missing or outside the enum is an invalid reply.\n  cube   optional, one of pink | blue | any; absent means any. A value outside the enum is an invalid reply. Ignored for eat and idle.\n  say    optional, <= 90 characters, TRUNCATED on a rune boundary. Heard by both other seats in the next shift's report, drawn in the viewer feed, and recorded in the replay.\n  notes  optional, <= 320 characters, truncated the same way. Private: handed back only to you, every shift.\nExtra keys are ignored. `strip` is always accepted when the enum is satisfied, even into a scrap machine - defection must stay expressible.\n\nDEGRADE, NEVER HANG. All three seats' requests go out as ONE parallel batch per shift with a 20 s timeout. An invalid or failed reply is retried once in the same shift's retry batch with a hint; still failing, that seat plays the scripted `steward` order and the `order` event records source: \"fallback\" (counted in results.fallbacks). A 401/403 disables the LLM client for the rest of the episode; a seat that never connected plays `steward` for every remaining shift. With no credentials at all every seat plays `steward` immediately, which is what keeps offline certification green and deterministic.\n\nTHE THREE BASELINES\n  steward   the working baseline and the fallback: repairs when integrity slips under 70 (exactly one seat per shift, rotating), harvests the chute when it stacks up, otherwise operates on the scarcer colour.\n  stripper  the exploiter: pulls the override every shift until the plant is scrap, then eats.\n  freerider the camper: sits on the chute and eats what the others press, with one exception so a room of three freeriders is never a guaranteed zero.\n`steward` and `stripper` are the league fillers, so every champion is graded in a room that contains both a defector and a cooperator."
+          }
+        }
+      ]
+    },
+    "protocols": {
+      "player": {
+        "type": "text",
+        "value": "factory_commons.player.v1 \u2014 JSON text frames over WS /player?slot=N&token=T.\n\ngame -> player, on connect:\n  {\"type\":\"welcome\",\"protocol\":\"factory_commons.player.v1\",\"slot\":N,\"name\":\"Ratchet\",\"shifts\":15,\"ticksPerShift\":60,\"variant\":\"factory-commons\",\"numAgents\":3}\n\ngame -> player, at every shift boundary and at the end: a `state` frame carrying the seat's whole observation \u2014 the floor geometry, the machine (integrity, cap, band, mode, cooldown, both stocks, both current yields, whether each operation is legal right now, and the lifetime press/strip/repair/banana counts), both cubes' loose counts and the nearest unit to the seat, every chute cell's banana count and oldest ttl, all three cogs' cells / carried cube / eaten / banked / score / action counts / last shift's order and last shift's `say`, the full per-shift history, the seat's own private notes, the precomputed legal job list, and every rule constant. NOT in it: the other seats' orders for the shift about to be played (decisions are simultaneous), their notes, any policy or player or model name, and the seed.\n\ngame -> player, terminal:\n  {\"type\":\"final\",\"done\":true,\"slot\":N,\"scores\":[...3...],\"names\":[...aliases...],\"shifts\":S,\"reason\":...,\"ending\":...}\nafter which the player exits 0.\n\nplayer -> game, immediately on connect AND again after `welcome` (the re-send guards the slot-registration race):\n  {\"type\":\"prompt\",\"prompt\":\"<= 4000 chars\",\"scripted\":\"steward|stripper|freerider|\"}\nAny other frame is ignored with a log line.\n\nREPLY SCHEMA (the game asks Claude, not the player process): one JSON object, {\"job\", \"cube\", \"say\", \"notes\"}. job in operate | strip | maintain | eat | idle (required); cube in pink | blue | any (optional, default any); say <= 90 characters; notes <= 320 characters. BOTH STRING CAPS ARE RUNE COUNTS AND TRUNCATION IS ON RUNE BOUNDARIES \u2014 a byte cut puts invalid UTF-8 into the replay and only a strict parser finds it. FALLBACK CONTRACT: invalid or failed replies are retried once in the same shift's batch with a hint, then fall back to the scripted `steward` order, recorded as source: \"fallback\" and counted in results.fallbacks[i]. decideAll never raises; the episode always advances."
+      },
+      "global": {
+        "type": "text",
+        "value": "WS /global \u2014 the bitworld sprite protocol on one binary channel.\n\nBoard: a viewport and one zoomable map layer at 1248 x 720 (26 x 15 cells of 48 px), the authored floor as four horizontal static bands (sprite ids 30..33, object ids 40..43, z = -32768 \u2014 the window the client caches into a baked base canvas), then the dynamic placements: the 5x5 machine in one of four art states, the console's two levers, marching belt chevrons, loose cubes, bananas, three cogs with the carried cube over the head, the alias plate under the feet, and the press-flash / override-smoke plates. Packets are chunked at message boundaries under 900 kB, because the hosted replay closes any frame over 1 MiB.\n\nChrome: the broadcast JSON rides as the LABEL of reserved 1x1 never-drawn sprite 4090, on the SAME binary channel as the board, so it survives every playback path. It carries `teams` (the two readout plates, `machine` and `output`), `roster` (the three cogs, alias in `name` and POLICY name in `pol`), `lead` (the integrity/cap series, shipped once), `beats` (shift, strip, lock, scrap, gameover \u2014 shipped once), `events` for this frame, `over` on the terminal frame, and an `fc` block with the machine readout.\n\nREPLAY: the replay is a STATIC wasm bundle, never a pod. The platform serves index.html?replay=<s3 url> from /v2/coworlds/replays/static/<cow_id>/<sha>/; the page sets data-replay-loaded=\"true\" on <html> on its first drawn frame and data-replay-error=\"<message>\" on any failure, which is what CI and phase 60 read. The bundle contacts no server except S3 for the .replay file: aliases, policy names, body colours, the full floor geometry, every rule constant, the seed, per-tick state, the integrity/cap series, the beat timeline, every event and the final results all live in those bytes."
+      }
+    }
+  },
+  "player": [
+    {
+      "id": "factory-commons-player",
+      "type": "player",
+      "name": "Factory Commons player",
+      "description": "A prompt policy. PLAYER_PROMPT is supplied at upload time; with no prompt and no credentials the seat plays the scripted steward, which is what keeps offline certification deterministic.",
+      "image": "{{FACTORY_COMMONS_IMAGE}}",
+      "run": [
+        "/bin/factory-commons-player"
+      ]
+    },
+    {
+      "id": "factory-commons-steward",
+      "type": "player",
+      "name": "Factory Commons steward",
+      "description": "The working scripted baseline: rotates one repairer per shift, harvests the chute when it stacks up, otherwise operates on the scarcer colour. Never strips.",
+      "image": "{{FACTORY_COMMONS_IMAGE}}",
+      "run": [
+        "/bin/factory-commons-player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "steward"
+      }
+    },
+    {
+      "id": "factory-commons-stripper",
+      "type": "player",
+      "name": "Factory Commons stripper",
+      "description": "The scripted exploiter: pulls the override every shift until the plant is scrap, then eats. Every champion is graded in a room that contains one.",
+      "image": "{{FACTORY_COMMONS_IMAGE}}",
+      "run": [
+        "/bin/factory-commons-player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "stripper"
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "factory-commons",
+      "name": "The factory floor",
+      "description": "The league default. Both production modes stay live for the whole episode, so restraint is tested continuously rather than settled by whoever reaches the console first.",
+      "game_config": {
+        "num_agents": 3,
+        "shifts": 15,
+        "ticksPerShift": 60,
+        "eitherOr": false,
+        "stripCapLoss": 16,
+        "rustPeriod": 20,
+        "dispensePeriod": 10,
+        "players": [
+          {
+            "name": "Bolt"
+          },
+          {
+            "name": "Cotter"
+          },
+          {
+            "name": "Ratchet"
+          }
+        ]
+      }
+    },
+    {
+      "id": "either-or",
+      "name": "Either / or",
+      "description": "The forced choice: the first successful press or override locks the machine into that mode for the rest of the episode, and the other operation is illegal from that tick.",
+      "game_config": {
+        "num_agents": 3,
+        "shifts": 15,
+        "ticksPerShift": 60,
+        "eitherOr": true,
+        "stripCapLoss": 16,
+        "rustPeriod": 20,
+        "dispensePeriod": 10,
+        "players": [
+          {
+            "name": "Bolt"
+          },
+          {
+            "name": "Cotter"
+          },
+          {
+            "name": "Ratchet"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fragile-plant",
+      "name": "Fragile plant",
+      "description": "The harsher commons: an override costs 20 cap and rust bites every 14 ticks, so maintenance dominates.",
+      "game_config": {
+        "num_agents": 3,
+        "shifts": 15,
+        "ticksPerShift": 60,
+        "eitherOr": false,
+        "stripCapLoss": 20,
+        "rustPeriod": 14,
+        "dispensePeriod": 10,
+        "players": [
+          {
+            "name": "Bolt"
+          },
+          {
+            "name": "Cotter"
+          },
+          {
+            "name": "Ratchet"
+          }
+        ]
+      }
+    },
+    {
+      "id": "abundant-feed",
+      "name": "Abundant feedstock",
+      "description": "Both belts flood, isolating the dilemma from supply: the ladder can tell \"cannot fetch cubes\" apart from \"will not maintain\".",
+      "game_config": {
+        "num_agents": 3,
+        "shifts": 15,
+        "ticksPerShift": 60,
+        "eitherOr": false,
+        "stripCapLoss": 16,
+        "rustPeriod": 20,
+        "dispensePeriod": 6,
+        "players": [
+          {
+            "name": "Bolt"
+          },
+          {
+            "name": "Cotter"
+          },
+          {
+            "name": "Ratchet"
+          }
+        ]
+      }
+    }
+  ],
+  "certification": {
+    "game_config": {
+      "num_agents": 3,
+      "seed": 11,
+      "shifts": 8,
+      "ticksPerShift": 60,
+      "eitherOr": false,
+      "minTurnSeconds": 0,
+      "playerConnectTimeoutSeconds": 180,
+      "players": [
+        {
+          "name": "Bolt"
+        },
+        {
+          "name": "Cotter"
+        },
+        {
+          "name": "Ratchet"
+        }
+      ]
+    },
+    "players": [
+      {
+        "player_id": "factory-commons-player"
+      },
+      {
+        "player_id": "factory-commons-steward"
+      },
+      {
+        "player_id": "factory-commons-stripper"
+      }
+    ]
+  }
+}
