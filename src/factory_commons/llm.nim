@@ -748,9 +748,19 @@ proc decideAll*(
       batch.post(request.url, request.headers, request.body, $index)
     client.lastBatchSize = batch.len
     client.batches += 1
-    let responses =
-      if client.stub != nil: client.stub(batch)
-      else: client.curl.makeRequests(batch, client.timeoutSeconds)
+    ## The transport call sits INSIDE the try. `decideAll` promises never to
+    ## raise, and every failure the tests drive arrives inside the
+    ## `ResponseBatch` — but `curly.makeRequests` is the one call here whose
+    ## raising behaviour is not this module's to define, so a raise from it
+    ## must land on the fallback path like any other transport failure.
+    var responses: ResponseBatch
+    try:
+      responses =
+        if client.stub != nil: client.stub(batch)
+        else: client.curl.makeRequests(batch, client.timeoutSeconds)
+    except CatchableError as error:
+      log "llm: batch transport raised: " & cleanError(error.msg)
+      break
     var stillOpen: seq[int]
     for position, index in open:
       let seat = seats[index]

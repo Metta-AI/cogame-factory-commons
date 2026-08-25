@@ -287,6 +287,29 @@ proc transportFailuresNeverRaise() =
       check not disabledAfter,
         mode & ": a transient failure does not disable the client"
 
+proc aRaisingTransportStillAnswersEverySeat() =
+  ## `decideAll` promises never to raise. Every failure the cases above drive
+  ## comes back INSIDE the ResponseBatch; this one is the transport itself
+  ## raising, which is what `curly.makeRequests` may do and what the review
+  ## could not settle by reading. The episode must still get three orders.
+  var batches = 0
+  proc stub(batch: RequestBatch): ResponseBatch {.gcsafe.} =
+    inc batches
+    raise newException(FactoryError, "libcurl exploded")
+  let config = baseConfig()
+  var sim = initSim(config)
+  let client = newStubLlmClient(config, stub)
+  let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
+    @[skNone, skNone, skNone])
+  check batches == 1, "a raising transport is not retried inside the shift"
+  check orders.len == SeatCount, "a raising transport still answers every seat"
+  for order in orders:
+    check order.source == osFallback,
+      "and every seat falls back to the scripted steward"
+    check parseJob($order.job) >= 0, "with an order inside the enum"
+  check not client.disabled,
+    "a raise is transient: the client is not disabled by it"
+
 proc noCredentialsMeansEverySeatPlaysSteward() =
   ## The load-bearing offline path: `docker_smoke.sh` and `coworld certify` run
   ## with no key at all, and the episode must still finish deterministically.
@@ -330,6 +353,7 @@ scriptedSeatsAreNotBatched()
 invalidRepliesRetryOnceThenFallBack()
 halfValidRepliesRetryOnlyTheFailures()
 transportFailuresNeverRaise()
+aRaisingTransportStillAnswersEverySeat()
 noCredentialsMeansEverySeatPlaysSteward()
 
 block promptsCarryTheContract:
