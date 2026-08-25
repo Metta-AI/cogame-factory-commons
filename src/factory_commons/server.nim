@@ -338,7 +338,11 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
     if playDeadline > 0.0:
       log "episode timeout " & $timeoutSeconds.int & "s (" &
         (if hostedTimeout.len > 0: "from env" else: "assumed") &
-        "); playing until " & $(timeoutSeconds * PlayBudgetFraction).int & "s"
+        "); the last shift must START by " &
+        $(timeoutSeconds * PlayBudgetFraction -
+          (config.shiftBudgetSeconds() + config.settleBudgetSeconds()).float).int &
+        "s so the episode SETTLES by " &
+        $(timeoutSeconds * PlayBudgetFraction).int & "s"
 
     while true:
       var
@@ -349,9 +353,11 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
       withLock stateLock:
         if state.sim.done:
           break
-        if playDeadline > 0.0 and epochTime() > playDeadline:
+        if not config.shiftFitsBeforeDeadline(epochTime(), playDeadline):
           log "play deadline reached after " & $state.sim.shift & "/" &
-            $config.shifts & " shifts; ending early"
+            $config.shifts & " shifts (a shift needs " &
+            $config.shiftBudgetSeconds() & "s and settling " &
+            $config.settleBudgetSeconds() & "s); ending early"
           state.sim.endEarly()
           state.broadcastLocked()
           break

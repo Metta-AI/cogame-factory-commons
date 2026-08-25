@@ -405,6 +405,37 @@ block pacingHonoursMinTurnSeconds:
     "the worst-case batch budget (" & $worst.int & "s) fits inside 60% of " &
     $defaultGameConfig().episodeTimeoutSeconds & "s"
 
+block theEpisodeSETTLESInsideThePlayBudget:
+  ## The budget is a SETTLE deadline, not a start deadline: the platform keeps
+  ## nothing from an episode that outruns its timeout, and `finishEpisode`
+  ## still has to flush, write two artifacts and serve the shutdown grace
+  ## after the last tick.
+  let
+    c = defaultGameConfig()
+    deadline = 0.6 * c.episodeTimeoutSeconds.float
+    reserve = (c.shiftBudgetSeconds() + c.settleBudgetSeconds()).float
+  check c.shiftBudgetSeconds() == 2 * c.llmTimeoutSeconds + c.minTurnSeconds,
+    "a shift's worst case is its batch, its retry batch and its pacing"
+  check c.settleBudgetSeconds() == 1 + c.shutdownGraceSeconds,
+    "settling is the flush, the writes and the shutdown grace"
+  check reserve < deadline,
+    "the reserve (" & $reserve.int & "s) is a fraction of the budget (" &
+    $deadline.int & "s)"
+  check c.shiftFitsBeforeDeadline(0.0, deadline),
+    "the first shift always starts"
+  check c.shiftFitsBeforeDeadline(deadline - reserve, deadline),
+    "a shift with exactly its worst case left still starts"
+  check not c.shiftFitsBeforeDeadline(deadline - reserve + 1.0, deadline),
+    "a shift that would settle one second late does NOT start"
+  check c.shiftFitsBeforeDeadline(1_000_000.0, 0.0),
+    "with no configured timeout there is no deadline to miss"
+  ## The whole worst case, end to end: the connect ceiling, then the last
+  ## shift that is allowed to start, then the shift itself, then settling —
+  ## all of it inside the 60% the checklist states.
+  check c.playerConnectTimeoutSeconds.float + reserve <= deadline,
+    "even a room that burns the whole connect ceiling (" &
+    $c.playerConnectTimeoutSeconds & "s) has room for a shift and a settle"
+
 oneBatchCarriesEveryOpenSeat()
 scriptedSeatsAreNotBatched()
 invalidRepliesRetryOnceThenFallBack()

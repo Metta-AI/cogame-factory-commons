@@ -709,6 +709,30 @@ proc turnPacingSleepMs*(config: GameConfig, elapsedSeconds: float): int =
     return 0
   int(remaining * 1000.0)
 
+proc shiftBudgetSeconds*(config: GameConfig): int =
+  ## Worst-case wall clock of ONE shift: the batch, its one retry batch, and
+  ## the pacing sleep that follows. The ticks themselves are ~0.1 s.
+  2 * config.llmTimeoutSeconds + config.minTurnSeconds
+
+proc settleBudgetSeconds*(config: GameConfig): int =
+  ## Worst-case wall clock of `finishEpisode` AFTER the last shift: the 500 ms
+  ## socket flush, the two artifact writes, and the shutdown grace the hosted
+  ## certification pings during.
+  1 + config.shutdownGraceSeconds
+
+proc shiftFitsBeforeDeadline*(config: GameConfig, now, deadline: float): bool =
+  ## True when one more shift can both RUN and SETTLE before the play
+  ## deadline.
+  ##
+  ## The deadline is tested between shifts, so testing `now > deadline` alone
+  ## lets a shift that starts one millisecond early run its full worst case
+  ## and then settle ~73 s past the budget the platform is holding us to. The
+  ## budget is a settle deadline, not a start deadline.
+  if deadline <= 0.0:
+    return true
+  now + (config.shiftBudgetSeconds() + config.settleBudgetSeconds()).float <=
+    deadline
+
 proc decideAll*(
   client: LlmClient,
   sim: Sim,
