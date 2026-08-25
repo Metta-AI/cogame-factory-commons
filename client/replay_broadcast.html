@@ -2818,7 +2818,13 @@ body[data-embed] #board { top: 0; height: 100%; }
         '<span class="fc-alias">' + esc(String(p.name || '?').toUpperCase()) +
         '</span>' +
         (p.carrying ? '<i class="fc-pip ' + esc(p.carrying) + '"></i>' : '') +
-        '<span class="fc-pol">' + esc(p.pol || '') + '</span>' +
+        // The policy name is drawn HERE and nowhere else — but only when it
+        // says something the alias does not. An offline fixture seats the
+        // aliases as their own policy names, and "RATCHET RATCHET 18" is two
+        // words of noise in a chip that has to read at 360px.
+        (String(p.pol || '').toUpperCase() === String(p.name || '').toUpperCase()
+          ? ''
+          : '<span class="fc-pol">' + esc(p.pol || '') + '</span>') +
         (wrench ? '<span class="fc-wrench">' + wrench + '</span>' : '') +
         '<span class="fc-score">' + (p.score || 0) + '</span>' +
         '</span>';
@@ -3002,6 +3008,7 @@ body[data-embed] #board { top: 0; height: 100%; }
     shift: '', strip: 'OVERRIDE', lock: 'LOCKED', scrap: 'SCRAPPED',
     gameover: 'FINAL'
   };
+  var fcLabelledKinds = {};
   function decorateFactoryBeats() {
     var markers = document.querySelectorAll('#scrub .beat-marker');
     for (var i = 0; i < markers.length; i++) {
@@ -3018,7 +3025,12 @@ body[data-embed] #board { top: 0; height: 100%; }
       el.setAttribute('aria-label', (FC_BEAT_LABEL[kind] || kind) +
         ' at tick ' + tick);
       el.title = (FC_BEAT_LABEL[kind] || kind || 'beat') + ' — tick ' + tick;
-      if (FC_BEAT_LABEL[kind]) {
+      // Label the FIRST marker of each kind only. Every marker keeps its
+      // title and its aria-label (and its seek), but seven overrides in one
+      // episode would otherwise stack seven "OVERRIDE" captions into an
+      // unreadable smear above the scrub track.
+      if (FC_BEAT_LABEL[kind] && !fcLabelledKinds[kind]) {
+        fcLabelledKinds[kind] = true;
         var lbl = document.createElement('span');
         lbl.className = 'beat-lbl';
         lbl.textContent = FC_BEAT_LABEL[kind];
