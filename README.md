@@ -142,19 +142,26 @@ The tests are the design note's own enforcement:
 ## Three constants differ from the design note
 
 Each one is a rung of that note's own repair ladder, each measured rather than
-guessed; `tests/test_feasibility.nim` is the enforcement, not the note's table.
+guessed; `tests/test_feasibility.nim` is the enforcement, not the note's table,
+and `tools/tune/feasibility_sweep.nim` is the grid that chose them
+(`docs/tuning.md` records its output).
 
 - **`moveCooldown` 2 → 1** (gate (a)). Rungs 1 and 2 do not move the binding
-  constraint, which is the banana total.
+  constraint, which is the banana total: at `moveCooldown 2` gate (a) is 0/12 on
+  every combination of the other four constants.
 - **`stripCapLoss` 12 → 16** (gate (c)). At 12 an all-stripper room *stalls*
-  rather than ruining the plant: the note's own walk needs a repair between the
-  sixth and seventh override, and no stripper ever repairs.
-- **`eatTrigger` 3 → 6** (gate (a)'s "every seat ≥ 14"). At 3, every press's
-  four bananas trigger a three-cog stampede and whoever is in the blue lane
-  takes nearly all of them.
+  rather than ruining the plant — 0/12 seeds end `factory_ruined` — because the
+  note's own walk needs a repair between the sixth and seventh override and no
+  stripper ever repairs. At 16 the plant scraps after **five** overrides rather
+  than the note's seven, and the private campaign is ~15 bananas rather than 13:
+  still under a fifth of the cooperative total, which is what gate (c) states.
 - **`privateYield` 3/2/1 → 4/3/1** (gate (b) rung 1), because five overrides now
   scrap the plant and eleven private bananas no longer reliably out-score a
   steward.
+
+`eatTrigger` keeps the note's authored **3**: the sweep measures 12/12 clean
+gate-(a) seeds with a worst seat of 25 at that value, against 12/12 and a worst
+seat of 21 at the 6 this repo shipped before its first review.
 
 ## Watchability
 
