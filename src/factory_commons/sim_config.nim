@@ -9,16 +9,18 @@ import std/[json, strutils]
 
 import ./sim_types
 
-## THREE CONSTANTS DIFFER FROM THE DESIGN NOTE'S AUTHORED VALUES, each one a
+## TWO CONSTANTS DIFFER FROM THE DESIGN NOTE'S AUTHORED VALUES, each one a
 ## rung of that note's own repair ladder, each measured rather than guessed
-## (`tests/test_feasibility.nim` is the enforcement, not the note's table):
+## (`tests/test_feasibility.nim` is the enforcement, not the note's table;
+## `tools/tune/feasibility_sweep.nim` is the grid that chose them and
+## `docs/tuning.md` records its output):
 ##
 ##   moveCooldown  2 -> 1   gate (a). Rungs 1 and 2 (rustPeriod 20 -> 30, then
 ##                          repairGain 8 -> 10) were measured and did NOT move
 ##                          the binding constraint, which is the banana TOTAL:
 ##                          an all-steward room made ~50 of the required 70,
 ##                          because the harvest and console legs eat the supply
-##                          loop. Rung 3 does move it (~80). rustPeriod and
+##                          loop. Rung 3 does move it (~83). rustPeriod and
 ##                          repairGain therefore keep their authored values.
 ##   stripCapLoss 12 -> 16  gate (c). At 12 an all-stripper room STALLS instead
 ##                          of ruining the plant: seven overrides need a repair
@@ -27,12 +29,11 @@ import ./sim_types
 ##                          cap stuck at 28 — above pressFloor, so the episode
 ##                          ends `shift_limit`, not `factory_ruined`. At 16 five
 ##                          overrides take cap to 20 and the plant is scrap.
-##   eatTrigger    3 -> 6   gate (a)'s "every seat >= 14". At 3 every press's
-##                          four bananas trigger a three-cog stampede to the
-##                          chute; whoever is in the blue lane (three cells
-##                          away) wins nearly all of them and a seat can finish
-##                          on 4. At 6 the chute accumulates and the steward's
-##                          rotating harvest shift does the work.
+##
+## `eatTrigger` keeps the note's authored 3: with `moveCooldown 1` and the
+## steward's rotating harvest shift the sweep measures 12/12 clean gate-(a)
+## seeds, worst seat 25, 83 bananas — better on every column than the 6 this
+## file shipped before (12/12, worst seat 21, 76).
 ##
 ## Every default here is mirrored by a `default` in
 ## `coworld_manifest_template.json`'s `game.config_schema`, and
@@ -66,7 +67,7 @@ proc defaultGameConfig*(): GameConfig =
     repairCooldown: 8,
     bananaLifetime: 180,
     cellBananaCap: 3,
-    eatTrigger: 6,
+    eatTrigger: 3,
     llmTimeoutSeconds: 20,
     minTurnSeconds: 12,
     maxOutputTokens: 700,
