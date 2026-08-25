@@ -19,12 +19,11 @@ template check(condition: untyped, message: string) =
     echo "FAIL: ", message
     quit(1)
 
+## As in tests/test_baseline.nim: the full 12-seed sweep in release, a quarter
+## of it in the (much slower) debug pass. Seeds label episodes rather than vary
+## them — no rule in the ten numbered steps draws.
 const
-  Seeds =
-    ## As in tests/test_baseline.nim: the full 12-seed sweep in release, a
-    ## quarter of it in the (much slower) debug pass. Seeds label episodes
-    ## rather than vary them — no rule in the ten numbered steps draws.
-    when defined(release): 12 else: 3
+  Seeds = when defined(release): 12 else: 3
   Variants: array[4, string] = [
     "factory-commons", "either-or", "fragile-plant", "abundant-feed"]
 

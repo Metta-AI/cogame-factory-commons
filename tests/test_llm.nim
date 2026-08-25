@@ -2,6 +2,11 @@
 ## PARALLEL BATCH per shift that makes a simultaneous-decision game fit inside
 ## its wall-clock budget.
 ##
+## The stubbed cases are PROCS, not module-level blocks: a `var` in a top-level
+## block is a GLOBAL in Nim, and a `{.gcsafe.}` transport closure may not touch
+## one. Inside a proc they are locals, which is what they were always meant to
+## be.
+##
 ## The transport is stubbed through `LlmClient.stub`, so every failure mode —
 ## a timeout, a 429, a 403, junk, prose, a fence — is driven deterministically
 ## without a socket.
@@ -121,7 +126,7 @@ block stripIntoAScrapMachineIsAccepted:
     "the kernel keeps a stripper productive on a scrap machine (rule 2.1)"
 
 # ---------------------------------------------------------------- the batch
-block oneBatchCarriesEveryOpenSeat:
+proc oneBatchCarriesEveryOpenSeat() =
   ## THE headline assertion of this file. A simultaneous-decision game that
   ## queries seats one at a time blows the 720 s play budget; the batch must
   ## carry all three.
@@ -146,7 +151,7 @@ block oneBatchCarriesEveryOpenSeat:
   for order in orders:
     check order.source == osLlm, "a first-attempt success is source=llm"
 
-block scriptedSeatsAreNotBatched:
+proc scriptedSeatsAreNotBatched() =
   var batches = 0
   proc stub(batch: RequestBatch): ResponseBatch {.gcsafe.} =
     inc batches
@@ -166,7 +171,7 @@ block scriptedSeatsAreNotBatched:
     "a seat that REGISTERED as scripted is not a fallback"
   check orders[2].job == jStrip, "and the stripper strips"
 
-block invalidRepliesRetryOnceThenFallBack:
+proc invalidRepliesRetryOnceThenFallBack() =
   var attempts: seq[int]
   proc stub(batch: RequestBatch): ResponseBatch {.gcsafe.} =
     attempts.add(batch.len)
@@ -194,7 +199,7 @@ block invalidRepliesRetryOnceThenFallBack:
     check results["fallbacks"][seat].getInt() == 1,
       "results.fallbacks[" & $seat & "] counts the fallback shift"
 
-block halfValidRepliesRetryOnlyTheFailures:
+proc halfValidRepliesRetryOnlyTheFailures() =
   var second = -1
   var round = 0
   proc stub(batch: RequestBatch): ResponseBatch {.gcsafe.} =
@@ -220,7 +225,7 @@ block halfValidRepliesRetryOnlyTheFailures:
   check orders[1].source == osRetry, "the retried seats are source=retry"
   check orders[2].source == osRetry, "both of them"
 
-block transportFailuresNeverRaise:
+proc transportFailuresNeverRaise() =
   for mode in ["timeout", "429", "403", "junk", "500", "refusal", "cutoff"]:
     var disabledAfter = false
     proc stub(batch: RequestBatch): ResponseBatch {.gcsafe.} =
@@ -282,7 +287,7 @@ block transportFailuresNeverRaise:
       check not disabledAfter,
         mode & ": a transient failure does not disable the client"
 
-block noCredentialsMeansEverySeatPlaysSteward:
+proc noCredentialsMeansEverySeatPlaysSteward() =
   ## The load-bearing offline path: `docker_smoke.sh` and `coworld certify` run
   ## with no key at all, and the episode must still finish deterministically.
   let config = baseConfig()
@@ -319,6 +324,13 @@ block pacingHonoursMinTurnSeconds:
   check worst < 0.6 * defaultGameConfig().episodeTimeoutSeconds.float,
     "the worst-case batch budget (" & $worst.int & "s) fits inside 60% of " &
     $defaultGameConfig().episodeTimeoutSeconds & "s"
+
+oneBatchCarriesEveryOpenSeat()
+scriptedSeatsAreNotBatched()
+invalidRepliesRetryOnceThenFallBack()
+halfValidRepliesRetryOnlyTheFailures()
+transportFailuresNeverRaise()
+noCredentialsMeansEverySeatPlaysSteward()
 
 block promptsCarryTheContract:
   let config = baseConfig()

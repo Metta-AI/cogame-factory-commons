@@ -5,7 +5,7 @@
 ## RE-EXPORTS every sibling module — so `import factory_commons/sim` still sees
 ## everything, exactly as `import ctf/sim` does.
 
-import std/[json, strutils]
+import std/json
 
 import ./sim_types, ./sim_config, ./sim_state, ./floor, ./machine, ./kernel
 

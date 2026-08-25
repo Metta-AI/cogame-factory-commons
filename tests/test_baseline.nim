@@ -19,18 +19,16 @@ template check(condition: untyped, message: string) =
     echo "FAIL: ", message
     quit(1)
 
+## The design note's matrix is 12 seeds x 4 variants x 6 seat mixes. The full
+## matrix runs in RELEASE, which is where a codegen bug would hide; the debug
+## pass — whose job is range and overflow checks, and which is 10-50x slower
+## through the kernel's per-tick BFS — runs a third of the seeds. Nothing in
+## Factory Commons draws from the seed (every tie in the ten numbered steps is
+## broken by slot or by (row, col) order), so a seed varies the LABEL and not
+## the episode; the seed loop is kept because the note asks for it and because
+## it is the guard that would catch a future rule that does draw.
 const
-  Seeds =
-    ## The design note's matrix is 12 seeds x 4 variants x 6 seat mixes. The
-    ## full matrix runs in RELEASE, which is where a codegen bug would hide; the
-    ## debug pass — whose job is range and overflow checks, and which is 10-50x
-    ## slower through the kernel's per-tick BFS — runs a third of the seeds.
-    ## Nothing in Factory Commons draws from the seed (every tie in the ten
-    ## numbered steps is broken by slot or by (row, col) order), so a seed
-    ## varies the LABEL and not the episode; the seed loop is kept because the
-    ## note asks for it and because it is the guard that would catch a future
-    ## rule that does draw.
-    when defined(release): 12 else: 4
+  Seeds = when defined(release): 12 else: 4
   Variants: array[4, string] = [
     "factory-commons", "either-or", "fragile-plant", "abundant-feed"]
 

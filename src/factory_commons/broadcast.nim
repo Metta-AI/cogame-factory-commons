@@ -91,9 +91,9 @@ proc plateJson(headline: string, big: int, extra: JsonNode): JsonNode =
 proc seatJson(seat: SeatHud): JsonNode =
   %*{
     "s": seat.slot,
-    ## Not `machine`/`output`: the cogs are not on either readout plate, so the
-    ## starter's squad-pip strips stay empty and the appended roster strip owns
-    ## the per-seat chrome.
+    # Not `machine`/`output`: the cogs are not on either readout plate, so the
+    # starter's squad-pip strips stay empty and the appended roster strip owns
+    # the per-seat chrome.
     "team": "cog",
     "name": seat.alias,
     "pol": seat.policy,
@@ -162,9 +162,9 @@ proc buildStateJson*(
     "ff": false,
     "en": transportEnabled,
     "mm": -1,
-    ## Board pixels per LOGICAL board pixel. The 26x15 board is emitted at its
-    ## authored 1248x720, so this is 1 and every viewer measure that multiplies
-    ## through it is a no-op — unlike paintbot, which supersamples.
+    # Board pixels per LOGICAL board pixel. The 26x15 board is emitted at its
+    # authored 1248x720, so this is 1 and every viewer measure that multiplies
+    # through it is a no-op — unlike paintbot, which supersamples.
     "bs": 1,
     "pov": -1,
     "teams": teams,
@@ -234,8 +234,8 @@ proc buildStateJson*(
       "made": model.bananasMade,
       "strips": model.strips,
       "winners": winners,
-      ## `winner`/`draw` are what chrome_common.js's `setVerdict` reads. A tie
-      ## is correct for a commons game and needs no tiebreak, so it is a draw.
+      # `winner`/`draw` are what chrome_common.js's `setVerdict` reads. A tie
+      # is correct for a commons game and needs no tiebreak, so it is a draw.
       "winner": (if winners.len == 1: winners[0].getStr().toLowerAscii()
                  else: ""),
       "draw": winners.len != 1
