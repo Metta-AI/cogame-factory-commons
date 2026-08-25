@@ -49,6 +49,37 @@ proc clearBlocked*(sim: var Sim, seat: int) =
   if seat >= 0 and seat < sim.lastBlocked.len:
     sim.lastBlocked[seat] = ""
 
+proc boundaryTick*(sim: Sim): int =
+  ## The tick a shift-close or a terminal event is recorded AT.
+  ##
+  ## `stepTick` records the tick it resolved and then advances the counter, so
+  ## at a shift boundary `sim.tick` is already one PAST the last recorded frame.
+  ## An event stamped there would sit outside `0 ..< frames.len` — which the
+  ## replay's own validator rejects, and which would also make
+  ## `eventsBetween` unable to ever deliver it to the feed.
+  max(0, sim.tick - 1)
+
+proc emitAt*(sim: var Sim, tick: int, kind: string, fields: JsonNode) =
+  ## `emit`, at an explicit tick. Only the shift close and the terminal event
+  ## need it; everything else fires during the tick it belongs to.
+  var row = newJObject()
+  row["t"] = %tick
+  row["k"] = %kind
+  if not fields.isNil and fields.kind == JObject:
+    for key, value in fields:
+      row[key] = value
+  sim.events.add(row)
+
+proc beatAt*(sim: var Sim, tick: int, kind: string, fields: JsonNode) =
+  doAssert kind in BeatKinds, "unknown beat kind: " & kind
+  var row = newJObject()
+  row["t"] = %tick
+  row["k"] = %kind
+  if not fields.isNil and fields.kind == JObject:
+    for key, value in fields:
+      row[key] = value
+  sim.beats.add(row)
+
 proc emit*(sim: var Sim, kind: string, fields: JsonNode) =
   ## Appends one event row. `t` and `k` are always present and always first,
   ## so live emission and a re-read of the replay are byte-identical (the rule

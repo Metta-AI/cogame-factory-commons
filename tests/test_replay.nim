@@ -43,7 +43,7 @@ proc policyNames(config: GameConfig): seq[string] =
 # ---------------------------------------------------------------- the episode
 let
   config = baseConfig()
-  episode = runScripted(config, [skSteward, skSteward, skStripper])
+  episode = runScripted(config, [skSteward, skSteward, skSteward])
   results = episode.resultsJson(config.policyNames())
   replayBytes = buildReplay(episode, config.policyNames(), results)
 

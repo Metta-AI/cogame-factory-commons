@@ -258,7 +258,8 @@ proc closeShift*(sim: var Sim) =
     eaten.add(%sim.cogs[seat].eaten)
     banked.add(%sim.cogs[seat].banked)
   sim.history.add(record)
-  sim.emit("shift", %*{
+  let boundary = sim.boundaryTick()
+  sim.emitAt(boundary, "shift", %*{
     "shift": sim.shift,
     "integrity": sim.machine.integrity,
     "cap": sim.machine.cap,
@@ -271,7 +272,7 @@ proc closeShift*(sim: var Sim) =
     "strips": sim.machine.strips,
     "repairs": sim.machine.repairs
   })
-  sim.beat("shift", %*{"n": sim.shift})
+  sim.beatAt(boundary, "shift", %*{"n": sim.shift})
 
 proc finish(sim: var Sim, reason, ending: string) =
   if sim.done:
@@ -282,8 +283,10 @@ proc finish(sim: var Sim, reason, ending: string) =
   var scores = newJArray()
   for seat in 0 ..< sim.cogs.len:
     scores.add(%sim.score(seat))
-  sim.emit("end", %*{"reason": reason, "ending": ending, "scores": scores})
-  sim.beat("gameover", %*{"ending": ending})
+  let boundary = sim.boundaryTick()
+  sim.emitAt(boundary, "end",
+    %*{"reason": reason, "ending": ending, "scores": scores})
+  sim.beatAt(boundary, "gameover", %*{"ending": ending})
 
 proc checkEnd*(sim: var Sim, deadlineReached: bool) =
   ## The episode ends at the FIRST of these, all checked at a shift boundary.

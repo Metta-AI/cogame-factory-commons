@@ -181,8 +181,9 @@ block fcBlockIsComplete:
     "cap >= integrity, so the gauge's notch is never left of the fill"
   check frame["bs"].getInt() == 1,
     "the board is emitted at its authored 1248x720, so bs is 1"
-  check frame["mt"].getInt() == config.maxTicks(),
-    "and the scheduled tick limit is stated"
+  check frame["mt"].getInt() == doc.maxTick(),
+    "and the tick span is the one the replay actually recorded — a replay is " &
+    "not a schedule, and the scrubber's axis has to match the frames it has"
 
 # ------------------------------------------------------ scope duplication
 block noGameBlockNameCollidesWithTheChromeAliases:
