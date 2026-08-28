@@ -202,7 +202,7 @@ proc broadcastLocked(gs: var GameState) =
     var nextState: GlobalViewerState
     let packet = buildViewerPacket(
       model, gs.config, current, nextState, events,
-      playing = not gs.sim.done, speed = 1, looping = false,
+      playing = not gs.sim.done, speed = 1.0, looping = false,
       transportEnabled = false,
       leadSeries = gs.sim.series, beats = beats)
     gs.viewerStates[socket] = nextState

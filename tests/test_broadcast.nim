@@ -63,7 +63,7 @@ proc frameAt(index: int, withLead = false): JsonNode =
   let model = doc.hudFromReplay(index)
   parseJson(model.buildStateJson(
     doc.eventsBetween(-1, doc.frames[index].t),
-    playing = true, speed = 1, looping = false, transportEnabled = true,
+    playing = true, speed = 1.0, looping = false, transportEnabled = true,
     leadSeries = (if withLead: doc.series else: @[]),
     beats = (if withLead: doc.beatsJson() else: nil)))
 
@@ -238,8 +238,9 @@ block noGameBlockNameCollidesWithTheChromeAliases:
       "chrome_common.js still exports " & name
 
 block chromeCommonIsByteForByte:
-  ## The one file that must not change at all. Its own wire-constants global is
-  ## why `window.CTF_WIRE` keeps that name.
+  ## coworld-ctf's `client/chrome_common.js` plus the fleet-wide replay
+  ## transport patch (the 0.5x speed chip); nothing else in it changes, and
+  ## its own wire-constants global is why `window.CTF_WIRE` keeps that name.
   let chrome = readFile(root / "client" / "chrome_common.js")
   check "window.CTF_WIRE" in chrome, "chrome_common.js reads window.CTF_WIRE"
   check "window.CTF_WIRE" in WireConstantsJs,
