@@ -459,6 +459,36 @@ block allStripperRuinsTheFactory:
       sawScrap = true
   check sawScrap, "and drops a `scrap` scrubber beat"
 
+# ---------------------------------------------------------------- half speed
+block halfSpeedIsAReplayOnlyCrawl:
+  ## The fleet-wide 1/2x replay speed: command '5' selects
+  ## ReplayHalfSpeedIndex, the chrome shows 0.5, and the step budget spends
+  ## one frame every OTHER presentation frame (halfPhase parity).
+  var speedIndex = 0
+  applySpeedCommand(speedIndex, '5')
+  check speedIndex == ReplayHalfSpeedIndex, "'5' selects 1/2x"
+  check replayDisplaySpeed(speedIndex) == 0.5,
+    "the chrome speed at 1/2x is 0.5, got " & $replayDisplaySpeed(speedIndex)
+  check replaySpeed(speedIndex) == 1,
+    "the integer speed clamps to 1x at 1/2x"
+  check replayStepBudget(speedIndex, halfPhase = false) == 0,
+    "even frame at 1/2x spends no frame"
+  check replayStepBudget(speedIndex, halfPhase = true) == 1,
+    "odd frame at 1/2x spends one frame"
+  applySpeedCommand(speedIndex, '+')
+  check speedIndex == 0, "'+' from 1/2x lands on 1x"
+  check replayDisplaySpeed(speedIndex) == 1.0, "and the chrome shows 1.0"
+  check replayStepBudget(speedIndex, halfPhase = false) == 1,
+    "at 1x every frame advances"
+  applySpeedCommand(speedIndex, '-')
+  check speedIndex == ReplayHalfSpeedIndex, "'-' from 1x lands on 1/2x"
+  applySpeedCommand(speedIndex, '-')
+  check speedIndex == ReplayHalfSpeedIndex, "1/2x is the floor"
+  applySpeedCommand(speedIndex, '6')
+  check replaySpeed(speedIndex) == 16 and
+    replayDisplaySpeed(speedIndex) == 16.0,
+    "'6' still selects 16x and shows 16.0"
+
 echo "test_replay: ", checks, " checks passed (",
   replayBytes.len, " replay bytes, ", episode.events.len, " events, ",
   doc.frames.len, " frames)"

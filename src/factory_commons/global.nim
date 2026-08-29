@@ -394,7 +394,7 @@ proc buildViewerPacket*(
   nextState: var GlobalViewerState,
   events: JsonNode,
   playing: bool,
-  speed: int,
+  speed: float,
   looping: bool,
   transportEnabled: bool,
   leadSeries: seq[array[3, int]],

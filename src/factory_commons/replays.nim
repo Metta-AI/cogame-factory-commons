@@ -382,3 +382,57 @@ proc beatsJson*(doc: ReplayDoc): JsonNode =
   result = newJArray()
   for row in doc.beats:
     result.add(row)
+
+# ---------------------------------------------------------------- the speeds
+# The playhead itself lives in `replay-viewer/factory_commons_replay.nim`
+# (state playback is just an array index), but the speed vocabulary is here so
+# the native tests can exercise it — the wasm entry only runs in a browser.
+
+const ReplayHalfSpeedIndex* = -1
+  ## `speedIndex` sentinel for the replay-only 1/2x playback (command '5'):
+  ## one frame is spent every other presentation frame (halfPhase parity).
+
+proc replaySpeed*(speedIndex: int): int =
+  ## The integer playback multiplier (1 while at 1/2x — the fractional pace
+  ## lives in replayStepBudget's frame parity).
+  PlaybackSpeeds[clamp(speedIndex, 0, PlaybackSpeeds.high)]
+
+proc replayDisplaySpeed*(speedIndex: int): float =
+  ## The speed the chrome shows: 0.5 at the half-speed sentinel, else the
+  ## integer multiplier.
+  if speedIndex == ReplayHalfSpeedIndex: 0.5
+  else: float(replaySpeed(speedIndex))
+
+proc replayStepBudget*(speedIndex: int, halfPhase: bool): int =
+  ## How many frames playback advances this presentation frame: the chosen
+  ## speed, except at 1/2x a frame is spent only every other call (halfPhase
+  ## parity).
+  if speedIndex == ReplayHalfSpeedIndex:
+    (if halfPhase: 1 else: 0)
+  else:
+    replaySpeed(speedIndex)
+
+proc applySpeedCommand*(speedIndex: var int, command: char) =
+  ## Applies one playback speed command. '5' selects the 1/2x replay speed
+  ## (ReplayHalfSpeedIndex), and '-' floors there.
+  case command
+  of '+', '=':
+    speedIndex = min(speedIndex + 1, PlaybackSpeeds.high)
+  of '-', '_':
+    speedIndex = max(speedIndex - 1, ReplayHalfSpeedIndex)
+  of '1':
+    speedIndex = 0
+  of '2':
+    speedIndex = 1
+  of '3':
+    speedIndex = 2
+  of '4':
+    speedIndex = 3
+  of '5':
+    speedIndex = ReplayHalfSpeedIndex
+  of '8':
+    speedIndex = 4
+  of '6':
+    speedIndex = 5
+  else:
+    discard

@@ -23,6 +23,11 @@ var
   frameIndex = 0
   playing = true
   speedIndex = 0
+    ## Index into PlaybackSpeeds, or ReplayHalfSpeedIndex (-1) for the
+    ## replay-only 1/2x speed (one frame every other presentation frame).
+  halfPhase = false
+    ## Frame parity while at 1/2x speed: the playhead advances only on the
+    ## odd frames, toggled once per frame() call.
   looping = false
 
 ## --- Progress stage note ---
@@ -50,22 +55,13 @@ proc bytesFromPointer(data: ptr uint8, length: int): string =
   if length > 0:
     copyMem(result[0].addr, data, length)
 
-proc currentSpeed(): int =
-  PlaybackSpeeds[max(0, min(PlaybackSpeeds.len - 1, speedIndex))]
-
-proc setSpeed(value: int) =
-  for i, speed in PlaybackSpeeds:
-    if speed == value:
-      speedIndex = i
-      return
-
 proc renderCurrent(events: JsonNode) =
   var nextViewer: GlobalViewerState
   let model = doc.hudFromReplay(frameIndex)
   packet = buildViewerPacket(
     model, doc.config, viewer, nextViewer, events,
     playing = playing,
-    speed = currentSpeed(),
+    speed = replayDisplaySpeed(speedIndex),
     looping = looping,
     transportEnabled = true,
     leadSeries = doc.series,
@@ -85,6 +81,7 @@ proc loadReplay(data: ptr uint8, length: cint): cint
     frameIndex = 0
     playing = true
     speedIndex = 0
+    halfPhase = false
     looping = false
     runtimeLoaded = true
     let note = " (" & $doc.frames.len & " frames, " & $doc.events.len &
@@ -122,14 +119,8 @@ proc applyCommands() =
     of 'e': frameIndex = doc.frames.len - 1
     of 'r': looping = not looping
     of 'f': discard          ## no lull spans: every shift is a beat
-    of '1': setSpeed(1)
-    of '2': setSpeed(2)
-    of '3': setSpeed(3)
-    of '4': setSpeed(4)
-    of '8': setSpeed(8)
-    of '6': setSpeed(16)
-    of '+': speedIndex = min(PlaybackSpeeds.len - 1, speedIndex + 1)
-    of '-': speedIndex = max(0, speedIndex - 1)
+    of '1', '2', '3', '4', '5', '8', '6', '+', '=', '-', '_':
+      applySpeedCommand(speedIndex, command[0])
     else: discard
   viewer.replayCommands = @[]
 
@@ -137,6 +128,7 @@ proc frame(): cint {.exportc: "factory_commons_frame", cdecl.} =
   if not runtimeLoaded:
     return 0
   stampStage(frameStage)
+  halfPhase = not halfPhase
   try:
     let previous = frameIndex
     var seeked = false
@@ -149,7 +141,9 @@ proc frame(): cint {.exportc: "factory_commons_frame", cdecl.} =
     if frameIndex != beforeCommands:
       seeked = true
     if playing and not seeked:
-      frameIndex += currentSpeed()
+      # At 1/2x (ReplayHalfSpeedIndex) the budget is one frame every OTHER
+      # presentation frame; otherwise it is the integer speed.
+      frameIndex += replayStepBudget(speedIndex, halfPhase)
       if frameIndex > doc.frames.len - 1:
         if looping:
           frameIndex = 0
