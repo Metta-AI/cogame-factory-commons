@@ -28,6 +28,22 @@ uv run python -m metta_posttrain.train --dataset /tmp/factory-default \
 ```
 
 The dataset imitates scripted play; its loss does not measure policy quality.
-Factory Commons's job and cube choices could support a factorized discrete RL
-codec, but the current Metta RL and PufferLib bridges do not expose its action
-and observation.
+
+For native PufferLib reinforcement learning, compile the persistent decision
+bridge and pass it to Metta's Coworld recipe:
+
+```bash
+nim c -d:release --path:src -o:factory-train-bridge tools/train_bridge.nim
+python3 tools/test_train_bridge.py ./factory-train-bridge
+uv run ./tools/run.py recipes.external.coworld.train \
+  'command=["/absolute/path/to/factory-train-bridge","/absolute/path/to/coworld_manifest_template.json","factory-commons"]' \
+  players=3 total_timesteps=100000
+```
+
+The last command runs from the Metta repository. Change the final argument to
+`either-or`, `fragile-plant`, or `abundant-feed` for the other certified
+variants. The bridge exposes 54 player-visible numeric values and independent
+job and cube heads with widths 5 and 3. The job mask follows the game's
+published legal-job list, including strip lockout. The steward provides
+opponent actions and optional teacher labels. Metta recipe support is in
+#24679, stacked on #24573.
