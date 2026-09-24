@@ -21,4 +21,10 @@ In the cooperative room, Jev chose `strip_pink` once in seeds 7 and 8 and twice 
 
 A `linux/amd64` image built and completed the repository's raw Docker smoke with `SMOKE_EXTRA_ENV=PLAYER_JEV=1` and a TypeSafe key forwarded only to the game container. The Jev seat made eight model decisions, all recorded as `source: llm` in the replay, with zero fallbacks. The eight decision batches averaged 259 ms and peaked at 469 ms. The episode ended normally; seat 0 scored 12 against steward 3 and stripper 10. This is an integration check, not a score comparison.
 
-Run the deterministic suite with `nimby sync nimby.lock` and `nim r --hints:off --path:src tests/test_llm.nim`. The seven repository test files passed locally. A private production canary is still needed to verify the hosted sidecar and measure player model spend. The local Direct TypeSafe model alias and hosted sidecar name need resolved-model comparison before using these runs as a cost benchmark.
+Run the deterministic suite with `nimby sync nimby.lock` and `nim r --hints:off --path:src tests/test_llm.nim`. The seven repository test files passed locally.
+
+## Production canary
+
+Version 0.1.4 passed hosted smoke and all ten certification checks. The release job reported failure while certification was still running; the live Coworld became canonical afterward. Private Experience Request `xreq_87c64656-b83d-40ca-9522-9459d2f176ae` seated relh-owned `factory-commons-jev-20260924:v1` against two active coordinator v2 policies. The request had a $0.05 combined player model cap and made no ladder submission.
+
+The three-shift episode completed with scores 16/3/0. The Jev seat made three model-sourced orders with zero fallback, confirmed by the replay and game log. Its five strip actions reduced cap to 20 and ruined the factory, so the win does not show socially useful play. The recorded 3,350–4,994 ms latencies are whole decision batches shared with the two prompt opponents, not Jev-only response times. Hosted player-model spend was not available at readback; the episode's $0.007427 execution cost is a separate charge. Resolve the local TypeSafe alias against the hosted model and run more matched episodes before making a cost or performance claim.
