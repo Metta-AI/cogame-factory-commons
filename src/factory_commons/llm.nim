@@ -54,10 +54,6 @@ type
     bedrockModels: seq[string]
     bedrockModel: int
     bedrockToken: string
-    jevEndpoint: string
-    jevKey: string
-    jevModel: string
-    jevTrajectoryId: string
     model*: string
     maxOutputTokens*: int
     timeoutSeconds*: int
@@ -125,22 +121,6 @@ proc newLlmClient*(config: GameConfig): LlmClient =
   let
     bedrockEndpoint = getEnv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME").strip()
     bedrockToken = getEnv("AWS_BEARER_TOKEN_BEDROCK").strip()
-    captureUrl = getEnv("METTA_CAPTURE_URL").strip()
-    typesafeKey = getEnv("TYPESAFE_API_KEY").strip()
-  if bedrockEndpoint.len > 0:
-    result.jevEndpoint = bedrockEndpoint.strip(chars = {'/'}, leading = false)
-    result.jevModel = "typesafe/jev-1.13"
-  elif captureUrl.len > 0:
-    result.jevEndpoint = captureUrl.strip(chars = {'/'}, leading = false)
-    result.jevKey = getEnv("METTA_CAPTURE_KEY").strip()
-    if result.jevKey.len == 0:
-      raise newException(FactoryError, "METTA_CAPTURE_KEY is required")
-    result.jevModel = "typesafe/jev-1.13"
-    result.jevTrajectoryId = "factory-commons-jev-" & $config.seed
-  elif typesafeKey.len > 0:
-    result.jevEndpoint = getEnv("TYPESAFE_BASE_URL", "https://api.typesafe.ai").strip(chars = {'/'}, leading = false)
-    result.jevKey = typesafeKey
-    result.jevModel = getEnv("TYPESAFE_DEFAULT_MODEL", "jev-latest")
   if bedrockEndpoint.len > 0 or bedrockToken.len > 0:
     let region = getEnv("AWS_REGION", getEnv("AWS_DEFAULT_REGION", "us-west-2"))
     let endpoint =
@@ -162,9 +142,7 @@ proc newLlmClient*(config: GameConfig): LlmClient =
   else:
     result.transport = ltNone
     result.disabled = true
-    if result.jevEndpoint.len > 0:
-      result.curl = newCurly()
-    log "llm: no Claude credentials; prompt seats play the scripted steward"
+    log "llm: no LLM credentials; every seat plays the scripted steward"
 
 proc newStubLlmClient*(config: GameConfig, stub: TransportStub): LlmClient =
   ## TEST-ONLY constructor: an enabled client whose transport is `stub`.
@@ -174,8 +152,6 @@ proc newStubLlmClient*(config: GameConfig, stub: TransportStub): LlmClient =
     timeoutSeconds: config.llmTimeoutSeconds,
     transport: ltAnthropic,
     apiKey: "test",
-    jevEndpoint: "http://test-sidecar",
-    jevModel: "typesafe/jev-1.13",
     stub: stub
   )
 
@@ -718,52 +694,6 @@ proc parseOrder*(payload: JsonNode): Order =
   result.say = cleanSay(payload{"say"}.getStr())
   result.notes = cleanNotes(payload{"notes"}.getStr())
 
-proc jevCriteria*(sim: Sim): JsonNode =
-  result = newJObject()
-  for job in sim.legalJobs():
-    if job in ["operate", "strip", "maintain"]:
-      for cube in ["pink", "blue"]:
-        result[job & "_" & cube] = %(job & " using a " & cube &
-          " cube for the next shift")
-    else:
-      result[job] = %(job & " for the next shift")
-
-proc jevOrder*(payload, criteria: JsonNode): Order =
-  let answer = payload["answers"]["decision"]
-  let probabilities = answer["probabilities"]
-  let reported = answer["choice"].getStr()
-  if answer["type"].getStr() != "choice" or
-      not criteria.hasKey(reported) or probabilities.len != criteria.len:
-    raise newException(FactoryError, "Jev returned the wrong choice set")
-  let confidence = answer["confidence"].getFloat()
-  if confidence < 0 or confidence > 1:
-    raise newException(FactoryError, "Jev confidence is outside [0, 1]")
-  var total = 0.0
-  var best = -1.0
-  var choice = ""
-  for name, probability in probabilities.pairs:
-    if not criteria.hasKey(name):
-      raise newException(FactoryError, "Jev returned an unknown choice")
-    let value = probability.getFloat()
-    if value < 0 or value > 1:
-      raise newException(FactoryError, "Jev probability is outside [0, 1]")
-    total += value
-    if value > best:
-      best = value
-      choice = name
-  if abs(total - 1) > probabilities.len.float * 0.005 + 1e-6:
-    raise newException(FactoryError, "Jev probabilities do not sum to one")
-  let parts = choice.split('_')
-  result = initOrder()
-  result.job = Job(parseJob(parts[0]))
-  if parts.len == 2:
-    result.cube = CubeChoice(parseCubeChoice(parts[1]))
-  log "jev: choice " & choice & " reported " & reported &
-    " confidence " & $confidence & " model " &
-    payload{"model"}.getStr() & " input_tokens " &
-    $payload["usage"]{"input_tokens"}.getInt() & " output_tokens " &
-    $payload["usage"]{"output_tokens"}.getInt()
-
 proc turnPacingSleepMs*(config: GameConfig, elapsedSeconds: float): int =
   ## Milliseconds to sleep before the NEXT batch so batch starts are at least
   ## `minTurnSeconds` apart.
@@ -808,12 +738,11 @@ proc decideAll*(
   sim: Sim,
   seats: seq[int],
   prompts: seq[string],
-  scripted: seq[ScriptKind],
-  jev: seq[bool]
+  scripted: seq[ScriptKind]
 ): seq[Order] =
   ## One order per seat in `seats`, in order. NEVER raises: any failure falls
   ## back to the scripted `steward` order so the episode always advances.
-  ## `prompts`, `scripted`, and `jev` are indexed by SEAT.
+  ## `prompts` and `scripted` are indexed by SEAT.
   ##
   ## All open seats go out in ONE batch — this is a simultaneous-decision game
   ## and querying seats sequentially is what blows the 720 s play budget.
@@ -825,8 +754,7 @@ proc decideAll*(
       ## A seat that REGISTERED as scripted is playing a baseline on purpose:
       ## `source: "scripted"`, and it is not a fallback.
       result[index] = sim.scriptedOrder(seat, kind)
-    elif (not jev[seat] and client.disabled) or
-        (jev[seat] and client.jevEndpoint.len == 0):
+    elif client.disabled:
       ## A PROMPT seat with no usable credentials plays the steward, and that
       ## IS a fallback — `results.fallbacks[i]` is how phase 60 greps a real
       ## number instead of guessing.
@@ -836,49 +764,17 @@ proc decideAll*(
       open.add(index)
 
   for attempt in 0 .. 1:
-    if client.disabled:
-      var enabled: seq[int]
-      for index in open:
-        if jev[seats[index]]:
-          enabled.add(index)
-        else:
-          result[index] = sim.scriptedOrder(seats[index], skSteward)
-          result[index].source = osFallback
-      open = enabled
-    if open.len == 0:
+    if open.len == 0 or client.disabled:
       break
     var batch: RequestBatch
     for index in open:
       let seat = seats[index]
-      if jev[seat]:
-        var headers: HttpHeaders
-        headers["content-type"] = "application/json"
-        if client.jevKey.len > 0:
-          headers["authorization"] = "Bearer " & client.jevKey
-        else:
-          headers["x-coworld-player-slot"] = $seat
-        if client.jevTrajectoryId.len > 0:
-          headers["x-metta-trajectory-id"] =
-            client.jevTrajectoryId & "-" & $seat
-        let body = %*{
-          "model": client.jevModel,
-          "state": sim.systemPrompt(seat) & "\n\n" &
-            sim.userPrompt(seat, prompts[seat]),
-          "questions": {"decision": {
-            "type": "choice",
-            "instructions": "Choose a standing order that maximizes your final banana score while accounting for how the other cogs affect the shared factory.",
-            "criteria": sim.jevCriteria()
-          }}
-        }
-        batch.post(client.jevEndpoint & "/v1/systemone", headers, $body,
-          $index)
-      else:
-        var user = sim.userPrompt(seat, prompts[seat])
-        if attempt > 0:
-          user.add("\nYour previous reply was invalid. Respond with ONLY the " &
-            "requested JSON object, using one of the listed job and cube values.")
-        let request = client.requestFor(sim.systemPrompt(seat), user)
-        batch.post(request.url, request.headers, request.body, $index)
+      var user = sim.userPrompt(seat, prompts[seat])
+      if attempt > 0:
+        user.add("\nYour previous reply was invalid. Respond with ONLY the " &
+          "requested JSON object, using one of the listed job and cube values.")
+      let request = client.requestFor(sim.systemPrompt(seat), user)
+      batch.post(request.url, request.headers, request.body, $index)
     client.lastBatchSize = batch.len
     client.batches += 1
     ## The transport call sits INSIDE the try. `decideAll` promises never to
@@ -901,18 +797,9 @@ proc decideAll*(
         stillOpen.add(index)
         continue
       try:
-        let response = responses[position].response
-        let error = responses[position].error
-        var order: Order
-        if jev[seat]:
-          if error.len > 0 or response.code < 200 or response.code >= 300:
-            raise newException(FactoryError, "Jev transport failed: " &
-              cleanError(error & " HTTP " & $response.code & " " &
-              response.body))
-          order = jevOrder(parseJson(response.body), sim.jevCriteria())
-        else:
-          let text = client.textOf(response, error, batch[position].url)
-          order = parseOrder(extractJsonObject(text))
+        let text = client.textOf(responses[position].response,
+          responses[position].error, batch[position].url)
+        var order = parseOrder(extractJsonObject(text))
         order.source = if attempt == 0: osLlm else: osRetry
         result[index] = order
       except ThrottledError as error:

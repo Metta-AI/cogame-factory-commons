@@ -41,7 +41,7 @@ overrides banked. Higher is better, and the game does not moralise in the score
 Full rules: [`docs/plans/2026-08-25-factory-commons-design.md`](docs/plans/2026-08-25-factory-commons-design.md),
 and `game.docs.pages` in the manifest.
 
-## A policy is a prompt
+## Fielding a policy
 
 Both entry points ship in **one image**, switched by environment variable:
 
@@ -65,8 +65,12 @@ coworld upload-policy coworld-factory-commons:latest \
 
 `USE_BEDROCK=true` is not optional on a prompt policy: without it the platform
 gives the player pod no Bedrock sidecar and the seat silently plays scripted.
-The Jev policy uses the same sidecar. It ranks legal jobs and cube colours;
-it does not generate the optional `say` or `notes` text.
+The Jev policy uses its own sidecar. The game sends it the same seat
+observation and accepts the same standing-order action shape available to
+any external policy. Jev ranks legal jobs and cube colours inside the player
+container; it does not generate the optional `say` or `notes` text. The
+game retains legality, tick rules, scoring, and replay. Existing prompt and
+scripted policy images keep their game adapter.
 
 A seat does **not** emit 900 actions by hand. Once per **shift** (60 ticks) each
 seat submits one **standing order** — a job and optionally a cube colour — and a
@@ -84,11 +88,10 @@ deterministic **floor kernel** turns it into the per-tick action stream
 `notes` is capped at **320 runes** and private. Both are truncated on **rune**
 boundaries, never bytes.
 
-All three seats' requests go out as **one parallel batch per shift** — decisions
-in a shift are simultaneous by rule, and querying seats one at a time is what
-blows the play budget. An invalid or failed reply is retried once in the same
-shift's batch with a hint, then falls back to the scripted `steward` order,
-recorded as `source: "fallback"` and counted in `results.fallbacks`.
+Legacy prompt requests go out as one parallel batch per shift. External
+players act concurrently on their seat observations. The game uses the
+scripted `steward` order after a missed action deadline and records it as
+`source: "fallback"` in `results.fallbacks`.
 
 The three baselines are `steward` (the working one, and the fallback),
 `stripper` (the exploiter) and `freerider` (the camper). `steward` and

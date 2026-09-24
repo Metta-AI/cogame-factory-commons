@@ -41,7 +41,7 @@
 #   ANTHROPIC_API_KEY          if set, forwarded to the game so the LLM path
 #                              is exercised; if unset the game must fall back
 #                              to its scripted baselines and still complete
-#   TYPESAFE_API_KEY           if set, forwarded to the game for a Jev seat
+#   TYPESAFE_API_KEY           if set, forwarded to the player for a Jev seat
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -198,9 +198,13 @@ if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
 else
   echo "no ANTHROPIC_API_KEY: the game must complete on its scripted baselines"
 fi
+player_model_env=()
 if [ -n "${TYPESAFE_API_KEY:-}" ]; then
-  game_env+=(-e TYPESAFE_API_KEY)
-  echo "TYPESAFE_API_KEY present: a PLAYER_JEV seat will use System One"
+  player_model_env+=(-e TYPESAFE_API_KEY)
+  echo "TYPESAFE_API_KEY present: a PLAYER_JEV policy can use System One"
+fi
+if [ -n "${TYPESAFE_BASE_URL:-}" ]; then
+  player_model_env+=(-e TYPESAFE_BASE_URL)
 fi
 
 echo "starting game container (${image} ${game_bin}) ..."
@@ -221,6 +225,7 @@ for ((slot = 0; slot < seats; slot++)); do
   eval "pcmd=( $(cat "${work_dir}/cmd-${slot}.args") )"
   docker run -d --name "${prefix}-p${slot}" --network "${network}" \
     -e COWORLD_PLAYER_WS_URL="ws://${prefix}-game:${port}/player?slot=${slot}&token=token-${slot}" \
+    ${player_model_env[@]+"${player_model_env[@]}"} \
     ${penv[@]+"${penv[@]}"} \
     "${image}" ${pcmd[@]+"${pcmd[@]}"} >/dev/null
 done

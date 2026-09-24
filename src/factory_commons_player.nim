@@ -1,10 +1,8 @@
-## Factory Commons player: a policy is just a prompt.
+## Factory Commons player: Jev decides from seat observations.
 ##
 ## Ported from `cogame-bullwhip/src/bullwhip_player.nim`. Connects to the game,
-## delivers its prompt, then only listens. ALL decision making happens inside
-## the game container, which sends this seat's prompt to Claude at every shift
-## boundary — as one parallel batch with the other two seats, because decisions
-## in a shift are simultaneous by rule.
+## sends actions for Jev policies. Published prompt and scripted policies
+## retain the existing game adapter.
 ##
 ## `PLAYER_SCRIPTED=steward|stripper|freerider` registers the seat as a built-in
 ## baseline instead. The game plays those deterministically, no LLM.
@@ -16,6 +14,7 @@
 
 import
   std/[json, options, os, strutils],
+  factory_commons/jev_policy,
   whisky
 
 const DefaultPrompt = """
@@ -45,8 +44,10 @@ when isMainModule:
   let scripted = getEnv("PLAYER_SCRIPTED").strip()
 
   proc promptFrame(): string =
-    $ %*{"type": "prompt", "prompt": prompt, "scripted": scripted,
-      "jev": jev}
+    if jev:
+      $ %*{"type": "register", "control": "external"}
+    else:
+      $ %*{"type": "prompt", "prompt": prompt, "scripted": scripted}
 
   echo "factory-commons player: connecting to game"
   let socket = newWebSocket(url)
@@ -75,8 +76,13 @@ when isMainModule:
     let message = received.get()
     if message.kind != TextMessage:
       continue
+    let payload = parseJson(message.data)
+    if jev and payload{"type"}.getStr() == "observation":
+      let action = chooseAction(payload["observation"], prompt)
+      socket.send($ %*{"type": "action", "shift": payload["shift"],
+        "action": action})
+      continue
     try:
-      let payload = parseJson(message.data)
       case payload{"type"}.getStr()
       of "welcome":
         echo "factory-commons player: seated at slot ",

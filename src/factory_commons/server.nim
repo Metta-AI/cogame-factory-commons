@@ -17,11 +17,14 @@
 ##   WS  /global                    live spectator: the sprite protocol plus the
 ##                                 chrome JSON on the same binary channel
 ##
-## `factory_commons.player.v1`, all JSON text frames:
+## `factory_commons.player.v2`, all JSON text frames:
 ##   game -> player: welcome / state (every shift boundary and at the end) /
-##                   final, after which the player exits 0
+##                   observation (one decision per shift) / final
+##   player -> game: {"type":"register","control":"external"}
+##                   {"type":"action","shift":N,"action":{...}}
+##   Published prompt policies retain their registration adapter:
 ##   player -> game: {"type":"prompt","prompt":"<= 4000 chars",
-##                    "scripted":"steward|stripper|freerider|", "jev":false}
+##                    "scripted":"steward|stripper|freerider|"}
 
 import
   std/[json, locks, os, sets, strutils, tables, times, unicode],
@@ -80,7 +83,9 @@ type
     sim: Sim
     prompts: seq[string]
     scripted: seq[ScriptKind]
-    jev: seq[bool]
+    external: seq[bool]
+    awaiting: seq[bool]
+    actions: seq[JsonNode]
     playerSockets: Table[int, WebSocket]
     socketSlots: Table[WebSocket, int]
     globalSockets: HashSet[WebSocket]
@@ -351,7 +356,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
         seats: seq[int]
         prompts: seq[string]
         scripted: seq[ScriptKind]
-        jev: seq[bool]
+        external: seq[bool]
       withLock stateLock:
         if state.sim.done:
           break
@@ -368,7 +373,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
         simCopy = state.sim
         prompts = state.prompts
         scripted = state.scripted
-        jev = state.jev
+        external = state.external
         ## A seat that never connected, or whose socket died, plays the steward
         ## for every remaining shift — the episode never blocks on a socket.
         for seat in seats:
@@ -378,12 +383,51 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
         log "shift " & $(state.sim.shift + 1) & " of " & $config.shifts &
           " at " & $(epochTime() - gameStart).int & "s"
 
-      ## The slow part (Claude, ONE parallel batch for the whole shift) runs
+      withLock stateLock:
+        for seat in seats:
+          if external[seat]:
+            state.awaiting[seat] = true
+            state.actions[seat] = nil
+            if state.playerSockets.hasKey(seat):
+              state.playerSockets[seat].send($ %*{
+                "type": "observation",
+                "shift": simCopy.shift,
+                "observation": simCopy.observationJson(seat)
+              })
+
+      for seat in seats:
+        if external[seat]:
+          scripted[seat] = skSteward
+
+      ## The slow part (Claude, ONE parallel batch for legacy prompts) runs
       ## outside the lock on a snapshot; only this thread mutates the sim, so
       ## the snapshot cannot go stale.
       let batchStart = epochTime()
-      let orders = client.decideAll(simCopy, seats, prompts, scripted, jev)
+      var orders = client.decideAll(simCopy, seats, prompts, scripted)
       let batchSeconds = epochTime() - batchStart
+
+      let actionDeadline = epochTime() + config.llmTimeoutSeconds.float
+      while epochTime() < actionDeadline:
+        var waiting = false
+        withLock stateLock:
+          for seat in seats:
+            if external[seat] and state.actions[seat].isNil:
+              waiting = true
+        if not waiting:
+          break
+        sleep(20)
+
+      withLock stateLock:
+        for index, seat in seats:
+          if external[seat]:
+            state.awaiting[seat] = false
+            if not state.actions[seat].isNil:
+              orders[index] = parseOrder(state.actions[seat])
+              orders[index].source = osLlm
+            else:
+              orders[index].source = osFallback
+              log "seat " & $seat &
+                " missed action deadline; using steward fallback"
 
       withLock stateLock:
         for index, seat in seats:
@@ -516,6 +560,23 @@ proc websocketHandler(
         return
       try:
         let payload = parseJson(message.data)
+        if payload{"type"}.getStr() == "register":
+          if payload["control"].getStr() != "external":
+            raise newException(FactoryError, "unknown player control")
+          withLock stateLock:
+            state.external[slot] = true
+          log "seat " & $slot & " registered external action control"
+          return
+        if payload{"type"}.getStr() == "action":
+          withLock stateLock:
+            if state.external[slot] and state.awaiting[slot] and
+                payload["shift"].getInt() == state.sim.shift:
+              let action = payload["action"]
+              let order = parseOrder(action)
+              if $order.job notin state.sim.legalJobs():
+                raise newException(FactoryError, "job is not legal")
+              state.actions[slot] = action
+          return
         if payload{"type"}.getStr() != "prompt":
           log "ignoring player frame of type " & payload{"type"}.getStr()
           return
@@ -530,7 +591,6 @@ proc websocketHandler(
         withLock stateLock:
           state.prompts[slot] = prompt
           state.scripted[slot] = kind
-          state.jev[slot] = payload{"jev"}.getBool()
         log "seat " & $slot & " delivered a prompt (" & $prompt.len &
           " chars" & (if kind != skNone: ", scripted " & $kind else: "") & ")"
       except CatchableError as error:
@@ -567,7 +627,9 @@ proc runGameServer*(config: GameConfig, runtimeConfig: RuntimeConfig) =
   state.sim = initSim(config)
   state.prompts = newSeq[string](config.numAgents)
   state.scripted = newSeq[ScriptKind](config.numAgents)
-  state.jev = newSeq[bool](config.numAgents)
+  state.external = newSeq[bool](config.numAgents)
+  state.awaiting = newSeq[bool](config.numAgents)
+  state.actions = newSeq[JsonNode](config.numAgents)
   runtimeConfigGlobal = runtimeConfig
 
   let router = buildRouter()
