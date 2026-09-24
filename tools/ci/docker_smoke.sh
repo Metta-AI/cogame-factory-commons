@@ -41,6 +41,7 @@
 #   ANTHROPIC_API_KEY          if set, forwarded to the game so the LLM path
 #                              is exercised; if unset the game must fall back
 #                              to its scripted baselines and still complete
+#   TYPESAFE_API_KEY           if set, forwarded to the game for a Jev seat
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -196,6 +197,10 @@ if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
   echo "ANTHROPIC_API_KEY present: the LLM path will be exercised"
 else
   echo "no ANTHROPIC_API_KEY: the game must complete on its scripted baselines"
+fi
+if [ -n "${TYPESAFE_API_KEY:-}" ]; then
+  game_env+=(-e TYPESAFE_API_KEY)
+  echo "TYPESAFE_API_KEY present: a PLAYER_JEV seat will use System One"
 fi
 
 echo "starting game container (${image} ${game_bin}) ..."

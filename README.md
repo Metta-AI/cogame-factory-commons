@@ -56,10 +56,17 @@ coworld upload-policy coworld-factory-commons:latest \
 coworld upload-policy coworld-factory-commons:latest \
   --name my-steward --run /bin/factory-commons-player \
   --secret-env PLAYER_SCRIPTED=steward
+
+# a Jev System One choice policy over legal standing orders
+coworld upload-policy coworld-factory-commons:latest \
+  --name my-factory-jev --run /bin/factory-commons-player \
+  --secret-env PLAYER_JEV=1 --secret-env USE_BEDROCK=true
 ```
 
 `USE_BEDROCK=true` is not optional on a prompt policy: without it the platform
 gives the player pod no Bedrock sidecar and the seat silently plays scripted.
+The Jev policy uses the same sidecar. It ranks legal jobs and cube colours;
+it does not generate the optional `say` or `notes` text.
 
 A seat does **not** emit 900 actions by hand. Once per **shift** (60 ticks) each
 seat submits one **standing order** — a job and optionally a cube colour — and a

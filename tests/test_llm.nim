@@ -142,7 +142,7 @@ proc oneBatchCarriesEveryOpenSeat() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2],
-    @["a", "b", "c"], @[skNone, skNone, skNone])
+    @["a", "b", "c"], @[skNone, skNone, skNone], @[false, false, false])
   check seen.len == 1, "one batch, not three requests"
   check seen[0] == SeatCount,
     "and it carries every open seat: got " & $seen[0] & " of " & $SeatCount
@@ -164,12 +164,38 @@ proc scriptedSeatsAreNotBatched() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2], @["p", "", ""],
-    @[skNone, skSteward, skStripper])
+    @[skNone, skSteward, skStripper], @[false, false, false])
   check batches == 1, "one batch"
   check orders[0].job == jEat, "the prompt seat got its LLM order"
   check orders[1].source == osScripted,
     "a seat that REGISTERED as scripted is not a fallback"
   check orders[2].job == jStrip, "and the stripper strips"
+
+proc jevSeatRanksLegalStandingOrders() =
+  proc stub(batch: RequestBatch): ResponseBatch {.gcsafe.} =
+    check batch.len == 1, "only the Jev seat enters the batch"
+    check batch[0].url == "http://test-sidecar/v1/systemone",
+      "Jev uses the System One endpoint"
+    let request = parseJson(batch[0].body)
+    let criteria = request["questions"]["decision"]["criteria"]
+    check criteria.hasKey("maintain_pink"), "maintenance is a legal choice"
+    var probabilities = newJObject()
+    for name, _ in criteria.pairs:
+      probabilities[name] = %(if name == "maintain_pink": 1.0 else: 0.0)
+    var response: Response
+    response.code = 200
+    response.body = $ %*{"answers": {"decision": {
+      "type": "choice", "choice": "operate_blue", "confidence": 0.9,
+      "probabilities": probabilities}}, "usage": {"cost": 0.0001}}
+    result.add((response, ""))
+  let config = baseConfig()
+  let sim = initSim(config)
+  let client = newStubLlmClient(config, stub)
+  let orders = client.decideAll(sim, @[0, 1, 2], @["", "", ""],
+    @[skNone, skSteward, skSteward], @[true, false, false])
+  check orders[0].job == jMaintain and orders[0].cube == ccPink,
+    "the probability argmax becomes the Jev standing order"
+  check orders[0].source == osLlm, "Jev is recorded as a model order"
 
 proc invalidRepliesRetryOnceThenFallBack() =
   var attempts: seq[int]
@@ -184,7 +210,7 @@ proc invalidRepliesRetryOnceThenFallBack() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-    @[skNone, skNone, skNone])
+    @[skNone, skNone, skNone], @[false, false, false])
   check attempts.len == 2, "one batch plus exactly one retry batch"
   check attempts[0] == SeatCount and attempts[1] == SeatCount,
     "the retry carries the seats that failed"
@@ -219,7 +245,7 @@ proc halfValidRepliesRetryOnlyTheFailures() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-    @[skNone, skNone, skNone])
+    @[skNone, skNone, skNone], @[false, false, false])
   check second == 2, "the retry batch carries only the two failures, got " & $second
   check orders[0].source == osLlm, "the seat that answered first time is llm"
   check orders[1].source == osRetry, "the retried seats are source=retry"
@@ -260,7 +286,7 @@ proc transportFailuresNeverRaise() =
     var sim = initSim(config)
     let client = newStubLlmClient(config, stub)
     let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-      @[skNone, skNone, skNone])
+      @[skNone, skNone, skNone], @[false, false, false])
     check orders.len == SeatCount, mode & ": still one order per seat"
     for order in orders:
       check order.source == osFallback,
@@ -281,7 +307,7 @@ proc transportFailuresNeverRaise() =
           result.add((response, ""))
       client.stub = counting
       discard client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-        @[skNone, skNone, skNone])
+        @[skNone, skNone, skNone], @[false, false, false])
       check later == 0, "a disabled client issues no further requests"
     else:
       check not disabledAfter,
@@ -300,7 +326,7 @@ proc aRaisingTransportStillAnswersEverySeat() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-    @[skNone, skNone, skNone])
+    @[skNone, skNone, skNone], @[false, false, false])
   check batches == 1, "a raising transport is not retried inside the shift"
   check orders.len == SeatCount, "a raising transport still answers every seat"
   for order in orders:
@@ -336,7 +362,7 @@ proc aThrottledSeatWaitsForTheNextShift() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-    @[skNone, skNone, skNone])
+    @[skNone, skNone, skNone], @[false, false, false])
   check sizes.len == 2, "one batch and one retry batch, got " & $sizes.len
   check sizes[0] == 3, "the first batch carries every open seat"
   check sizes[1] == 2,
@@ -361,7 +387,7 @@ proc allSeatsThrottledIssueNoRetryBatch() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-    @[skNone, skNone, skNone])
+    @[skNone, skNone, skNone], @[false, false, false])
   check batches == 1,
     "a fully throttled shift issues ONE batch, not two, got " & $batches
   for order in orders:
@@ -375,7 +401,7 @@ proc noCredentialsMeansEverySeatPlaysSteward() =
   var client = newLlmClient(config)
   if client.disabled:
     let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-      @[skNone, skNone, skNone])
+      @[skNone, skNone, skNone], @[false, false, false])
     for order in orders:
       check order.source == osFallback,
         "a prompt seat with no credentials is a FALLBACK, so it is counted"
@@ -438,6 +464,7 @@ block theEpisodeSETTLESInsideThePlayBudget:
 
 oneBatchCarriesEveryOpenSeat()
 scriptedSeatsAreNotBatched()
+jevSeatRanksLegalStandingOrders()
 invalidRepliesRetryOnceThenFallBack()
 halfValidRepliesRetryOnlyTheFailures()
 transportFailuresNeverRaise()

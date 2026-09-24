@@ -38,13 +38,15 @@ when isMainModule:
   let url = getEnv("COWORLD_PLAYER_WS_URL")
   if url.len == 0:
     quit("COWORLD_PLAYER_WS_URL is not set", 1)
+  let jev = getEnv("PLAYER_JEV") == "1"
   var prompt = getEnv("PLAYER_PROMPT")
-  if prompt.len == 0:
+  if prompt.len == 0 and not jev:
     prompt = DefaultPrompt
   let scripted = getEnv("PLAYER_SCRIPTED").strip()
 
   proc promptFrame(): string =
-    $ %*{"type": "prompt", "prompt": prompt, "scripted": scripted}
+    $ %*{"type": "prompt", "prompt": prompt, "scripted": scripted,
+      "jev": jev}
 
   echo "factory-commons player: connecting to game"
   let socket = newWebSocket(url)

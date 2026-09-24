@@ -21,7 +21,7 @@
 ##   game -> player: welcome / state (every shift boundary and at the end) /
 ##                   final, after which the player exits 0
 ##   player -> game: {"type":"prompt","prompt":"<= 4000 chars",
-##                    "scripted":"steward|stripper|freerider|"}
+##                    "scripted":"steward|stripper|freerider|", "jev":false}
 
 import
   std/[json, locks, os, sets, strutils, tables, times, unicode],
@@ -80,6 +80,7 @@ type
     sim: Sim
     prompts: seq[string]
     scripted: seq[ScriptKind]
+    jev: seq[bool]
     playerSockets: Table[int, WebSocket]
     socketSlots: Table[WebSocket, int]
     globalSockets: HashSet[WebSocket]
@@ -350,6 +351,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
         seats: seq[int]
         prompts: seq[string]
         scripted: seq[ScriptKind]
+        jev: seq[bool]
       withLock stateLock:
         if state.sim.done:
           break
@@ -366,6 +368,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
         simCopy = state.sim
         prompts = state.prompts
         scripted = state.scripted
+        jev = state.jev
         ## A seat that never connected, or whose socket died, plays the steward
         ## for every remaining shift — the episode never blocks on a socket.
         for seat in seats:
@@ -379,7 +382,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
       ## outside the lock on a snapshot; only this thread mutates the sim, so
       ## the snapshot cannot go stale.
       let batchStart = epochTime()
-      let orders = client.decideAll(simCopy, seats, prompts, scripted)
+      let orders = client.decideAll(simCopy, seats, prompts, scripted, jev)
       let batchSeconds = epochTime() - batchStart
 
       withLock stateLock:
@@ -527,6 +530,7 @@ proc websocketHandler(
         withLock stateLock:
           state.prompts[slot] = prompt
           state.scripted[slot] = kind
+          state.jev[slot] = payload{"jev"}.getBool()
         log "seat " & $slot & " delivered a prompt (" & $prompt.len &
           " chars" & (if kind != skNone: ", scripted " & $kind else: "") & ")"
       except CatchableError as error:
@@ -563,6 +567,7 @@ proc runGameServer*(config: GameConfig, runtimeConfig: RuntimeConfig) =
   state.sim = initSim(config)
   state.prompts = newSeq[string](config.numAgents)
   state.scripted = newSeq[ScriptKind](config.numAgents)
+  state.jev = newSeq[bool](config.numAgents)
   runtimeConfigGlobal = runtimeConfig
 
   let router = buildRouter()
