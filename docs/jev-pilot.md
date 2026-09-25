@@ -1,7 +1,7 @@
 # Factory Commons Jev pilot
 
 The results below used the superseded game-side Jev path in production
-version 0.1.4. The corrective player-policy integration is under review and
+version 0.1.4. The corrective player-policy integration is merged in source but
 has not been published to production. These scores are historical smoke
 evidence, not proof of the corrected observation/action path.
 
