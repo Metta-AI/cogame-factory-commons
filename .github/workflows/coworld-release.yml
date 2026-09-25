@@ -316,11 +316,13 @@ jobs:
             --timeout-seconds 900 \
             --wait-hosted-smoke \
             --hosted-smoke-timeout-seconds 1800 \
+            --wait-certification \
+            --certification-timeout-seconds 1800 \
             2>&1 | tee "$RR/upload.log"
           rc="${PIPESTATUS[0]}"
           set -e
           python3 - "$RR" "$rc" <<'PY'
-          import json, os, re, subprocess, sys, time
+          import json, os, re, subprocess, sys
           rr, rc = sys.argv[1], int(sys.argv[2])
           text = open(f"{rr}/upload.log", errors="replace").read()
 
@@ -338,19 +340,13 @@ jobs:
               "hosted_certification": grab(r"^Hosted certification: (.+)$"),
               "output_tail": text[-4000:],
           }
-          if rc == 0 and out["cow_id"] and out["canonical"] == "no":
-              for _ in range(24):
-                  status = json.loads(subprocess.check_output([
-                      "uvx", "--from", os.environ["COWORLD_PKG"], "coworld", "status",
-                      out["cow_id"], "--json",
-                  ]))
-                  out["hosted_certification"] = status["certification"]["state"]
-                  if status["coworld"]["canonical"]:
-                      out["canonical"] = "yes"
-                      break
-                  if out["hosted_certification"] == "failed":
-                      break
-                  time.sleep(5)
+          if rc == 0:
+              status = json.loads(subprocess.check_output([
+                  "uvx", "--from", os.environ["COWORLD_PKG"], "coworld", "status",
+                  out["cow_id"], "--json",
+              ]))
+              out["hosted_certification"] = status["certification"]["state"]
+              out["canonical"] = "yes" if status["coworld"]["canonical"] else "no"
           json.dump(out, open(f"{rr}/upload.json", "w"), indent=2)
           print(json.dumps({k: v for k, v in out.items() if k != "output_tail"}, indent=2))
           if rc != 0:
