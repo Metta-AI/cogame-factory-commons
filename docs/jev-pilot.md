@@ -1,5 +1,10 @@
 # Factory Commons Jev pilot
 
+The results below used the superseded game-side Jev path in production
+version 0.1.4. The corrective player-policy integration is under review and
+has not been published to production. These scores are historical smoke
+evidence, not proof of the corrected observation/action path.
+
 The `PLAYER_JEV=1` policy asks System One to rank the legal standing orders for each shift. It uses the seat's game-side sidecar in hosted play and the TypeSafe API for local tests. The game still batches simultaneous model seats, attributes sidecar calls to the player slot, and falls back to the steward order after two failed attempts. Jev chooses a job and cube colour; it does not write the optional public `say` or private `notes` text.
 
 ## Local paired episodes
