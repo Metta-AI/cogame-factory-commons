@@ -16,7 +16,7 @@ const
     ## irreversible cap, the either-or lock. Bump on any rule change; the
     ## replay records it so a consumer never has to infer which rules ran.
 
-  ProtocolPlayer* = "factory_commons.player.v1"
+  ProtocolPlayer* = "factory_commons.player.v2"
   ProtocolReplay* = "factory_commons.replay.v1"
   GameName* = "factory_commons"
 
