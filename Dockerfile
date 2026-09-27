@@ -1,8 +1,8 @@
 # Build Docker. Paintbot's two-stage nimby build (nimby 0.1.27, Nim 2.2.4),
 # producing BOTH binaries into one image: /bin/factory-commons (the game) and
 # /bin/factory-commons-player (the thin prompt-carrying player). One image,
-# env-switched — `PLAYER_PROMPT` for a text policy, `PLAYER_JEV` for System One,
-# `PLAYER_SCRIPTED` for a baseline — is the pin, not a convenience.
+# env-switched — `PLAYER_PROMPT` for a text policy and `PLAYER_SCRIPTED` for a
+# baseline — is the pin, not a convenience.
 FROM debian:bookworm-slim AS build
 
 RUN apt-get update && \

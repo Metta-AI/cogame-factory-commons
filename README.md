@@ -43,7 +43,7 @@ and `game.docs.pages` in the manifest.
 
 ## Fielding a policy
 
-Both entry points ship in **one image**, switched by environment variable:
+Prompt and scripted policies ship in **one image**, switched by environment variable:
 
 ```bash
 # an LLM policy — the whole strategy is the prompt
@@ -56,21 +56,13 @@ coworld upload-policy coworld-factory-commons:latest \
 coworld upload-policy coworld-factory-commons:latest \
   --name my-steward --run /bin/factory-commons-player \
   --secret-env PLAYER_SCRIPTED=steward
-
-# a Jev System One choice policy over legal standing orders
-coworld upload-policy coworld-factory-commons:latest \
-  --name my-factory-jev --run /bin/factory-commons-player \
-  --secret-env PLAYER_JEV=1 --secret-env USE_BEDROCK=true
 ```
 
 `USE_BEDROCK=true` is not optional on a prompt policy: without it the platform
 gives the player pod no Bedrock sidecar and the seat silently plays scripted.
-The Jev policy uses its own sidecar. The game sends it the same seat
-observation and accepts the same standing-order action shape available to
-any external policy. Jev ranks legal jobs and cube colours inside the player
-container; it does not generate the optional `say` or `notes` text. The
-game retains legality, tick rules, scoring, and replay. Existing prompt and
-scripted policy images keep their game adapter.
+External policies register over the same seat socket and receive private
+observations. They return complete standing orders. The game retains legality,
+tick rules, scoring, and replay.
 
 A seat does **not** emit 900 actions by hand. Once per **shift** (60 ticks) each
 seat submits one **standing order** — a job and optionally a cube colour — and a
