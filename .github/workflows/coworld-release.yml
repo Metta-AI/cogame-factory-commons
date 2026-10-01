@@ -225,7 +225,7 @@ jobs:
 
           def unset_player():
               # Never leave the runner acting as someone else: every later step
-              # in this job (upload-coworld, secret put) would inherit it.
+              # in this job (upload-coworld) would inherit it.
               result = softmax("player", "unset")
               if result.returncode != 0:
                   print(f"::warning::softmax player unset failed: "
@@ -424,7 +424,6 @@ jobs:
               f"| canonical | **{canonical_raw or 'unknown'}** |",
               f"| hosted smoke | {result['hosted_smoke'] or 'not reported'} |",
               f"| replay liveness | {(certify or {}).get('replay_liveness') or 'not certified'} |",
-              f"| secret put | {result['secret_put']} |",
               "",
               "### Policies",
               "",
