@@ -123,22 +123,11 @@ block uploadContract:
   check not manifest["certification"]["game_config"].hasKey("tokens"),
     "no runner-managed tokens in the cert fixture (0.1.42)"
 
-block theSecretNamespace:
-  ## The namespace must equal `game.name` CHARACTER FOR CHARACTER. They differ
-  ## whenever the game name has an underscore and the repo slug a hyphen, and
-  ## `upload-coworld` 400s on the mismatch AFTER a fully green certify.
+block hostedLlmNeedsNoSecret:
   let name = manifest["game"]["name"].getStr()
   check name == GameName, "game.name is " & GameName
-  let env = manifest["game"]["runnable"]["env"]
-  check env.hasKey("ANTHROPIC_API_KEY_URI"),
-    "ANTHROPIC_API_KEY_URI is in game.runnable.env — without it the hosted " &
-    "container never sees the coworld secret and every league episode " &
-    "silently plays scripted"
-  let uri = env["ANTHROPIC_API_KEY_URI"].getStr()
-  check uri == "secret://coworld/" & name & "/anthropic_api_key",
-    "the secret namespace equals game.name exactly, got " & uri
-  check "factory-commons" notin uri,
-    "the HYPHENATED slug must not appear in the secret URI"
+  doAssert manifest{"game"}{"runnable"}{"env"}{"ANTHROPIC_API_KEY_URI"}.isNil,
+    "hosted LLM uses the platform sidecar without provider secrets"
 
 block docsAndProtocols:
   let docs = manifest["game"]["docs"]
