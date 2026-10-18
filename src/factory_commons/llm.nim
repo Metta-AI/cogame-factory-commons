@@ -23,10 +23,11 @@
 ## deterministic. That fallback is load-bearing, not a nicety.
 
 import
-  std/[json, os, strutils, unicode],
+  std/[json, os, strutils, unicode, times],
   bitworld/runtime,
   curly,
-  ./sim, ./scripted
+  ./sim, ./scripted, ./prompts, ./evidence
+export prompts
 
 const
   AnthropicUrl = "https://api.anthropic.com/v1/messages"
@@ -48,6 +49,8 @@ type
     ## 403s and junk bodies without a socket.
 
   LlmClient* = ref object
+    attemptIds*: array[SeatCount, seq[string]]
+    selectedAttemptIds*: array[SeatCount, string]
     curl: Curly
     transport*: LlmTransport
     apiKey: string
@@ -435,7 +438,7 @@ proc floorPlanText(config: GameConfig): string =
     " ticks just crossing the plant, so specialising by colour beats " &
     "generalising.\n"
 
-proc systemPrompt*(sim: Sim, seat: int): string =
+proc systemPrompt*(sim: Sim, seat: int, selection: PromptSelection): string =
   let
     c = sim.config
     me = Aliases[seat].toUpperAscii()
@@ -443,9 +446,7 @@ proc systemPrompt*(sim: Sim, seat: int): string =
   for other in 0 ..< sim.cogs.len:
     if other != seat:
       others.add(Aliases[other])
-  result = "You are " & me & ", one of three cogs working a single shared " &
-    "factory. The other two are " & others.join(" and ") &
-    ". Nobody is on a team.\n" & floorPlanText(c) & """
+  result = selection.introduction(me, others.join(" and ")) & "\n" & floorPlanText(c) & """
 WHAT YOU DO: you choose ONE JOB for the next """ & $c.ticksPerShift &
     """ ticks. A deterministic floor
 kernel walks it for you - it fetches cubes, drops them in the right hopper,
@@ -709,6 +710,9 @@ proc parseOrder*(payload: JsonNode): Order =
   result.say = cleanSay(payload{"say"}.getStr())
   result.notes = cleanNotes(payload{"notes"}.getStr())
 
+proc orderJson*(order: Order): JsonNode =
+  %*{"job": $order.job, "cube": $order.cube, "say": order.say, "notes": order.notes}
+
 proc turnPacingSleepMs*(config: GameConfig, elapsedSeconds: float): int =
   ## Milliseconds to sleep before the NEXT batch so batch starts are at least
   ## `minTurnSeconds` apart.
@@ -753,7 +757,8 @@ proc decideAll*(
   sim: Sim,
   seats: seq[int],
   prompts: seq[string],
-  scripted: seq[ScriptKind]
+  scripted: seq[ScriptKind],
+  selection: PromptSelection
 ): seq[Order] =
   ## One order per seat in `seats`, in order. NEVER raises: any failure falls
   ## back to the scripted `steward` order so the episode always advances.
@@ -761,6 +766,9 @@ proc decideAll*(
   ##
   ## All open seats go out in ONE batch — this is a simultaneous-decision game
   ## and querying seats sequentially is what blows the 720 s play budget.
+  client.attemptIds = default(array[SeatCount, seq[string]])
+  client.selectedAttemptIds = default(array[SeatCount, string])
+  let destination = getEnv("FACTORY_COMMONS_ATTEMPT_TRACE_DIR")
   result = newSeq[Order](seats.len)
   var open: seq[int]
   for index, seat in seats:
@@ -782,13 +790,26 @@ proc decideAll*(
     if open.len == 0 or client.disabled:
       break
     var batch: RequestBatch
+    let started = epochTime()
     for index in open:
       let seat = seats[index]
       var user = sim.userPrompt(seat, prompts[seat])
       if attempt > 0:
         user.add("\nYour previous reply was invalid. Respond with ONLY the " &
           "requested JSON object, using one of the listed job and cube values.")
-      let request = client.requestFor(sim.systemPrompt(seat), user, seat)
+      let system = sim.systemPrompt(seat, selection)
+      let request = client.requestFor(system, user, seat)
+      let identity = $(sim.shift + 1) & "-" & $seat & "-" & $attempt
+      client.attemptIds[seat].add(identity)
+      if destination.len > 0:
+        let model = if client.transport == ltBedrock: client.bedrockModels[client.bedrockModel] else: client.model
+        writePrivate(destination / (identity & ".jsonl"), $(%*{
+          "event_type": "attempt_started", "attempt_id": identity, "visibility": "private",
+          "source_revision": getEnv("FACTORY_COMMONS_SOURCE_REVISION"),
+          "seat": seat, "shift": sim.shift + 1, "retry": attempt,
+          "prompt": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+          "prompt_template": selection.promptMetadata(system, user),
+          "request": {"transport": $client.transport, "model": model, "body": parseJson(request.body)}}) & "\n")
       batch.post(request.url, request.headers, request.body, $index)
     client.lastBatchSize = batch.len
     client.batches += 1
@@ -803,21 +824,46 @@ proc decideAll*(
         if client.stub != nil: client.stub(batch)
         else: client.curl.makeRequests(batch, client.timeoutSeconds)
     except CatchableError as error:
+      if destination.len > 0:
+        for index in open:
+          let identity = client.attemptIds[seats[index]][^1]
+          appendPrivate(destination / (identity & ".jsonl"), %*{
+            "event_type": "attempt_finished", "attempt_id": identity, "failure": error.msg,
+            "phase": "transport", "raw_response": newJNull(), "parsed_action": newJNull(),
+            "normalized_action": newJNull(), "selected": false,
+            "latency_ms": int((epochTime() - started) * 1000.0),
+            "platform_call_id": newJNull(), "behavior_logprobs": newJNull()})
       log "llm: batch transport raised: " & cleanError(error.msg)
       break
     var stillOpen: seq[int]
     for position, index in open:
       let seat = seats[index]
       if position >= responses.len:
+        if destination.len > 0:
+          let identity = client.attemptIds[seat][^1]
+          appendPrivate(destination / (identity & ".jsonl"), %*{
+            "event_type": "attempt_finished", "attempt_id": identity,
+            "failure": "missing batch response", "phase": "transport", "raw_response": newJNull(),
+            "parsed_action": newJNull(), "normalized_action": newJNull(), "selected": false,
+            "latency_ms": int((epochTime() - started) * 1000.0),
+            "platform_call_id": newJNull(), "behavior_logprobs": newJNull()})
         stillOpen.add(index)
         continue
+      var text, failure: string
+      var parsed, normalized = newJNull()
+      var selected = false
       try:
-        let text = client.textOf(responses[position].response,
+        text = client.textOf(responses[position].response,
           responses[position].error, batch[position].url)
-        var order = parseOrder(extractJsonObject(text))
+        parsed = extractJsonObject(text)
+        var order = parseOrder(parsed)
+        normalized = orderJson(order)
         order.source = if attempt == 0: osLlm else: osRetry
         result[index] = order
+        selected = true
+        client.selectedAttemptIds[seat] = client.attemptIds[seat][^1]
       except ThrottledError as error:
+        failure = error.msg
         ## design.md: "a 429 is logged and that seat is retried in the NEXT
         ## shift's batch". Re-asking a rate limiter that just said no, in the
         ## same second, spends the episode's request budget on a refusal — so
@@ -828,9 +874,20 @@ proc decideAll*(
         result[index] = sim.scriptedOrder(seat, skSteward)
         result[index].source = osFallback
       except CatchableError as error:
+        failure = error.msg
         log "llm: seat " & $seat & " attempt " & $attempt & " failed: " &
           cleanError(error.msg)
         stillOpen.add(index)
+      finally:
+        if destination.len > 0:
+          let identity = client.attemptIds[seat][^1]
+          appendPrivate(destination / (identity & ".jsonl"), %*{
+            "event_type": "attempt_finished", "attempt_id": identity,
+            "raw_response": responses[position].response.body, "response": text,
+            "failure": failure, "parsed_action": parsed, "normalized_action": normalized,
+            "selected": selected, "latency_ms": int((epochTime() - started) * 1000.0),
+            "http_status": responses[position].response.code, "transport_error": responses[position].error,
+            "platform_call_id": newJNull(), "behavior_logprobs": newJNull()})
     open = stillOpen
 
   for index in open:

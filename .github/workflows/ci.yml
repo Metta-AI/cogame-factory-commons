@@ -140,7 +140,7 @@ jobs:
               fi
               echo "::group::nim r ${flags} --path:src ${t}"
               # shellcheck disable=SC2086
-              if ! nim r ${flags} --path:src "${t}"; then
+              if ! nim r ${flags} --path:src -o:"${RUNNER_TEMP}/$(basename "${t}" .nim)-${m}" "${t}"; then
                 echo "::error::FAILED (${m}) ${t}"
                 fail=1
               fi
@@ -148,6 +148,25 @@ jobs:
             done
           done
           exit "${fail}"
+
+      - name: Complete numeric bridge games
+        run: |
+          set -euo pipefail
+          nim c -d:release --path:src -o:"${RUNNER_TEMP}/factory-bridge" tools/train_bridge.nim
+          python3 tools/test_train_bridge.py "${RUNNER_TEMP}/factory-bridge"
+
+      - name: Complete private candidate exports
+        run: |
+          set -euo pipefail
+          nim c -d:release --path:src -o:"${RUNNER_TEMP}/factory-export" tools/export_posttrain.nim
+          python3 tools/test_export_posttrain.py "${RUNNER_TEMP}/factory-export"
+
+      - name: Published native prompt and fallback games
+        run: |
+          set -euo pipefail
+          nim c -d:release --path:src -o:"${RUNNER_TEMP}/factory-game" src/factory_commons.nim
+          nim c -d:release --path:src -o:"${RUNNER_TEMP}/factory-player" src/factory_commons_player.nim
+          python3 tools/test_native_prompts.py "${RUNNER_TEMP}/factory-game" "${RUNNER_TEMP}/factory-player" "${RUNNER_TEMP}/factory-native" --smoke
 
   # ---------------------------------------------------------------------
   # Packaging smoke: the production image builds, and one real episode runs

@@ -189,7 +189,7 @@ proc bananaRot*(sim: var Sim) =
     else:
       inc i
 
-proc stepTick*(sim: var Sim) =
+proc stepTick*(sim: var Sim): seq[Action] {.discardable.} =
   ## Resolves the tick numbered `sim.tick` through the ten numbered steps, in
   ## order, then records it and advances the counter. Within a step, seats
   ## resolve in ASCENDING SLOT ORDER; belts and dispensers resolve pink then
@@ -204,6 +204,7 @@ proc stepTick*(sim: var Sim) =
     if actions[seat] notin {aPress, aStrip, aFix}:
       sim.clearBlocked(seat)
 
+  result = actions
   sim.resolveGraspDrop(actions)                                   # 4
 
   for seat in 0 ..< sim.cogs.len:                                  # 5
@@ -314,12 +315,12 @@ proc forfeit*(sim: var Sim) =
   ## replay are still written; every score is zero.
   sim.finish("forfeit", "forfeit")
 
-proc playShift*(sim: var Sim) =
+proc playShift*(sim: var Sim): seq[seq[Action]] {.discardable.} =
   ## One turn: `ticksPerShift` ticks, then the shift close.
   if sim.done:
     return
   for _ in 0 ..< sim.config.ticksPerShift:
-    sim.stepTick()
+    result.add(sim.stepTick())
   sim.closeShift()
 
 proc applyOrder*(sim: var Sim, seat: int, order: Order) =

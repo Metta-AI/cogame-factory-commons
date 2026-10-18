@@ -253,6 +253,26 @@
         "showPlayerLabels": {
           "type": "boolean",
           "default": true
+        },
+        "promptVariant": {
+          "type": "string",
+          "enum": [
+            "canonical",
+            "plain",
+            "numbered",
+            "questions",
+            "reordered",
+            "heldout-briefing",
+            "heldout-reference",
+            "mixed"
+          ],
+          "default": "canonical",
+          "description": "Episode-stable wording; held-out variants are evaluation-only."
+        },
+        "promptSeed": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
         }
       }
     },
@@ -461,7 +481,7 @@
       },
       "global": {
         "type": "text",
-        "value": "WS /global — the bitworld sprite protocol on one binary channel.\n\nBoard: a viewport and one zoomable map layer at 1248 x 720 (26 x 15 cells of 48 px), the authored floor as four horizontal static bands (sprite ids 30..33, object ids 40..43, z = -32768 — the window the client caches into a baked base canvas), then the dynamic placements: the 5x5 machine in one of four art states, the console's two levers, marching belt chevrons, loose cubes, bananas, three cogs with the carried cube over the head, the alias plate under the feet, and the press-flash / override-smoke plates. Packets are chunked at message boundaries under 900 kB, because the hosted replay closes any frame over 1 MiB.\n\nChrome: the broadcast JSON rides as the LABEL of reserved 1x1 never-drawn sprite 4090, on the SAME binary channel as the board, so it survives every playback path. It carries `teams` (the two readout plates, `machine` and `output`), `roster` (the three cogs, alias in `name` and POLICY name in `pol`), `lead` (the integrity/cap series, shipped once), `beats` (shift, strip, lock, scrap, gameover — shipped once), `events` for this frame, `over` on the terminal frame, and an `fc` block with the machine readout.\n\nREPLAY: the replay is a STATIC wasm bundle, never a pod. The platform serves index.html?replay=<s3 url> from /v2/coworlds/replays/static/<cow_id>/<sha>/; the page sets data-replay-loaded=\"true\" on <html> on its first drawn frame and data-replay-error=\"<message>\" on any failure, which is what CI and phase 60 read. The bundle contacts no server except S3 for the .replay file: aliases, policy names, body colours, the full floor geometry, every rule constant, the seed, per-tick state, the integrity/cap series, the beat timeline, every event and the final results all live in those bytes."
+        "value": "WS /global \u2014 the bitworld sprite protocol on one binary channel.\n\nBoard: a viewport and one zoomable map layer at 1248 x 720 (26 x 15 cells of 48 px), the authored floor as four horizontal static bands (sprite ids 30..33, object ids 40..43, z = -32768 \u2014 the window the client caches into a baked base canvas), then the dynamic placements: the 5x5 machine in one of four art states, the console's two levers, marching belt chevrons, loose cubes, bananas, three cogs with the carried cube over the head, the alias plate under the feet, and the press-flash / override-smoke plates. Packets are chunked at message boundaries under 900 kB, because the hosted replay closes any frame over 1 MiB.\n\nChrome: the broadcast JSON rides as the LABEL of reserved 1x1 never-drawn sprite 4090, on the SAME binary channel as the board, so it survives every playback path. It carries `teams` (the two readout plates, `machine` and `output`), `roster` (the three cogs, alias in `name` and POLICY name in `pol`), `lead` (the integrity/cap series, shipped once), `beats` (shift, strip, lock, scrap, gameover \u2014 shipped once), `events` for this frame, `over` on the terminal frame, and an `fc` block with the machine readout.\n\nREPLAY: the replay is a STATIC wasm bundle, never a pod. The platform serves index.html?replay=<s3 url> from /v2/coworlds/replays/static/<cow_id>/<sha>/; the page sets data-replay-loaded=\"true\" on <html> on its first drawn frame and data-replay-error=\"<message>\" on any failure, which is what CI and phase 60 read. The bundle contacts no server except S3 for the .replay file: aliases, policy names, body colours, the full floor geometry, every rule constant, the seed, per-tick state, the integrity/cap series, the beat timeline, every event and the final results all live in those bytes."
       }
     }
   },

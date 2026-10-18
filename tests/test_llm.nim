@@ -142,7 +142,7 @@ proc oneBatchCarriesEveryOpenSeat() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2],
-    @["a", "b", "c"], @[skNone, skNone, skNone])
+    @["a", "b", "c"], @[skNone, skNone, skNone], PromptSelection())
   check seen.len == 1, "one batch, not three requests"
   check seen[0] == SeatCount,
     "and it carries every open seat: got " & $seen[0] & " of " & $SeatCount
@@ -164,7 +164,7 @@ proc scriptedSeatsAreNotBatched() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2], @["p", "", ""],
-    @[skNone, skSteward, skStripper])
+    @[skNone, skSteward, skStripper], PromptSelection())
   check batches == 1, "one batch"
   check orders[0].job == jEat, "the prompt seat got its LLM order"
   check orders[1].source == osScripted,
@@ -184,7 +184,7 @@ proc invalidRepliesRetryOnceThenFallBack() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-    @[skNone, skNone, skNone])
+    @[skNone, skNone, skNone], PromptSelection())
   check attempts.len == 2, "one batch plus exactly one retry batch"
   check attempts[0] == SeatCount and attempts[1] == SeatCount,
     "the retry carries the seats that failed"
@@ -219,7 +219,7 @@ proc halfValidRepliesRetryOnlyTheFailures() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-    @[skNone, skNone, skNone])
+    @[skNone, skNone, skNone], PromptSelection())
   check second == 2, "the retry batch carries only the two failures, got " & $second
   check orders[0].source == osLlm, "the seat that answered first time is llm"
   check orders[1].source == osRetry, "the retried seats are source=retry"
@@ -260,7 +260,7 @@ proc transportFailuresNeverRaise() =
     var sim = initSim(config)
     let client = newStubLlmClient(config, stub)
     let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-      @[skNone, skNone, skNone])
+      @[skNone, skNone, skNone], PromptSelection())
     check orders.len == SeatCount, mode & ": still one order per seat"
     for order in orders:
       check order.source == osFallback,
@@ -281,7 +281,7 @@ proc transportFailuresNeverRaise() =
           result.add((response, ""))
       client.stub = counting
       discard client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-        @[skNone, skNone, skNone])
+        @[skNone, skNone, skNone], PromptSelection())
       check later == 0, "a disabled client issues no further requests"
     else:
       check not disabledAfter,
@@ -300,7 +300,7 @@ proc aRaisingTransportStillAnswersEverySeat() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-    @[skNone, skNone, skNone])
+    @[skNone, skNone, skNone], PromptSelection())
   check batches == 1, "a raising transport is not retried inside the shift"
   check orders.len == SeatCount, "a raising transport still answers every seat"
   for order in orders:
@@ -336,7 +336,7 @@ proc aThrottledSeatWaitsForTheNextShift() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-    @[skNone, skNone, skNone])
+    @[skNone, skNone, skNone], PromptSelection())
   check sizes.len == 2, "one batch and one retry batch, got " & $sizes.len
   check sizes[0] == 3, "the first batch carries every open seat"
   check sizes[1] == 2,
@@ -361,7 +361,7 @@ proc allSeatsThrottledIssueNoRetryBatch() =
   var sim = initSim(config)
   let client = newStubLlmClient(config, stub)
   let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-    @[skNone, skNone, skNone])
+    @[skNone, skNone, skNone], PromptSelection())
   check batches == 1,
     "a fully throttled shift issues ONE batch, not two, got " & $batches
   for order in orders:
@@ -375,7 +375,7 @@ proc noCredentialsMeansEverySeatPlaysSteward() =
   var client = newLlmClient(config)
   if client.disabled:
     let orders = client.decideAll(sim, @[0, 1, 2], @["a", "b", "c"],
-      @[skNone, skNone, skNone])
+      @[skNone, skNone, skNone], PromptSelection())
     for order in orders:
       check order.source == osFallback,
         "a prompt seat with no credentials is a FALLBACK, so it is counted"
@@ -449,7 +449,7 @@ noCredentialsMeansEverySeatPlaysSteward()
 block promptsCarryTheContract:
   let config = baseConfig()
   var sim = initSim(config)
-  let system = sim.systemPrompt(2)
+  let system = sim.systemPrompt(2, PromptSelection())
   check "RATCHET" in system, "the system prompt names the seat's alias in caps"
   check "Bolt" in system and "Cotter" in system,
     "and names the other two cogs — aliases only, never a policy name"
@@ -487,7 +487,7 @@ block promptsCarryTheContract:
   var slowConfig = baseConfig()
   slowConfig.moveCooldown = 2
   var slow = initSim(slowConfig)
-  let slowSystem = slow.systemPrompt(2)
+  let slowSystem = slow.systemPrompt(2, PromptSelection())
   check "A one-colour supply loop is about 44 ticks" in slowSystem,
     "and at moveCooldown 2 it states 44, not 22"
   check "may move once every 2 ticks" in slowSystem,
