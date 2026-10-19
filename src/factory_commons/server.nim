@@ -33,7 +33,7 @@ import
   curly,
   mummy,
   mummy/routers,
-  ./sim, ./scripted, ./llm, ./broadcast, ./global, ./replays, ./wire_constants, ./evidence
+  ./sim, ./scripted, ./llm, ./broadcast, ./global, ./replays, ./wire_constants
 
 const
   BroadcastEveryTicks = 6
@@ -79,7 +79,6 @@ wasm bundle, never a pod.</p>
 
 type
   GameState = object
-    tracePath: string
     selection: PromptSelection
     config: GameConfig
     sim: Sim
@@ -254,8 +253,6 @@ proc finishEpisode(runtimeConfig: RuntimeConfig) =
     state.finished = true
     grace = state.config.shutdownGraceSeconds
     results = state.sim.resultsJson(state.policyNames())
-    if state.tracePath.len > 0:
-      appendPrivate(state.tracePath, %*{"event_type": "host_finished", "results": results})
     replayData = buildReplay(state.sim, state.policyNames(), results)
 
     ## The final frame goes to the PLAYER sockets, so it carries the aliases —
@@ -434,8 +431,6 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
                 " missed action deadline; using steward fallback"
 
       withLock stateLock:
-        let eventStart = state.sim.events.len
-        var decisions = newJArray()
         for index, seat in seats:
           var order = orders[index]
           order.latencyMs = int(batchSeconds * 1000.0)
@@ -443,44 +438,13 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
             " -> " & $order.job & " " & $order.cube & " (" & $order.source &
             ")" & (if order.say.len > 0: " says \"" & order.say & "\"" else: "")
           state.sim.applyOrder(seat, order)
-          if state.tracePath.len > 0:
-            let system = systemPrompt(simCopy, seat, state.selection)
-            let user = userPrompt(simCopy, seat, prompts[seat])
-            let installed = orderJson(state.sim.cogs[seat].order)
-            let modelAccepted = not external[seat] and order.source in {osLlm, osRetry} and
-              installed == orderJson(orders[index]) and client.selectedAttemptIds[seat].len > 0
-            decisions.add(%*{
-              "event_type": "host_decision", "visibility": "private",
-              "seat": seat, "shift": simCopy.shift + 1,
-              "observation": simCopy.observationJson(seat),
-              "prompt": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-              "prompt_template": state.selection.promptMetadata(system, user),
-              "proposal": orderJson(orders[index]), "executed_action": installed,
-              "source": $order.source, "external": external[seat],
-              "attempt_ids": client.attemptIds[seat],
-              "selected_attempt_id": (if modelAccepted: %client.selectedAttemptIds[seat] else: newJNull()),
-              "order_event": state.sim.events[^1], "terminal": false})
-        let startTick = state.sim.tick
-        var actions: seq[seq[Action]]
         ## The tick loop, with a spectator frame every few ticks.
         for _ in 0 ..< config.ticksPerShift:
-          actions.add(state.sim.stepTick())
+          state.sim.stepTick()
           if state.sim.tick mod BroadcastEveryTicks == 0:
             state.broadcastLocked()
         state.sim.closeShift()
         state.sim.checkEnd(false)
-        if state.tracePath.len > 0:
-          for index in 0 ..< decisions.len:
-            decisions[index]["terminal"] = %(state.sim.done and index == decisions.len - 1)
-            appendPrivate(state.tracePath, decisions[index])
-          var frames, events = newJArray()
-          for tick in startTick ..< state.sim.tick: frames.add(frameJson(state.sim.frames[tick]))
-          for index in eventStart ..< state.sim.events.len: events.add(state.sim.events[index])
-          appendPrivate(state.tracePath, %*{
-            "event_type": "host_shift", "visibility": "private", "shift": simCopy.shift + 1,
-            "start_tick": startTick, "end_tick": state.sim.tick,
-            "event_start": eventStart, "event_end": state.sim.events.len, "events": events,
-            "kernel_actions": kernelActionsJson(actions), "frames": frames, "terminal": state.sim.done})
         state.sendPlayerStates()
         state.broadcastLocked()
 
@@ -656,18 +620,13 @@ proc buildRouter(): Router =
   result.get("/player", playerUpgradeHandler)
 
 proc runGameServer*(config: GameConfig, runtimeConfig: RuntimeConfig) =
-  state.selection = promptSelection(parseJson(runtimeConfig.config))
   if config.tokens.len < config.numAgents:
     raise newException(FactoryError,
       "config declares " & $config.numAgents & " seats but only " &
       $config.tokens.len & " tokens")
+  state.selection = promptSelection(parseJson(runtimeConfig.config))
   state.config = config
   state.sim = initSim(config)
-  state.tracePath = getEnv("FACTORY_COMMONS_HOST_TRACE_PATH")
-  if state.tracePath.len > 0:
-    writePrivate(state.tracePath, $(%*{"event_type": "host_started", "visibility": "private",
-      "source_revision": getEnv("FACTORY_COMMONS_SOURCE_REVISION"), "seed": config.seed,
-      "prompt_selection": state.selection.selectionMetadata()}) & "\n")
   state.prompts = newSeq[string](config.numAgents)
   state.scripted = newSeq[ScriptKind](config.numAgents)
   state.external = newSeq[bool](config.numAgents)

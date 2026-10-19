@@ -2,9 +2,10 @@
 
 ## Episode-stable prompt variants
 
-`canonical` preserves the original system prompt. Five training introductions
+`canonical` preserves the original system prompt. Five training wordings
 (`canonical`, `plain`, `numbered`, `questions`, `reordered`) paraphrase the role,
-other cogs, shared factory, and absence of teams. Shared rules stay fixed.
+other cogs, job responsibilities, and scoring. The v2 bank preserves machine
+facts, configuration-derived numbers, strategic hints, and output grammar.
 `mixed` selects using an explicit nonnegative `promptSeed % 5`, independently
 of simulator randomness. Selection remains fixed throughout an episode.
 `heldout-briefing` and `heldout-reference` are evaluation-only.
@@ -23,52 +24,41 @@ This fixes the former bridge/export leak of earlier seats' current orders.
 Seat-visible observations contain only that seat's private notes, exact message
 hashes, bank version, resolved wording, and selection seed.
 
-## Reviewed candidate exports
+## Teacher exports
 
 Build once and export from a clean committed checkout:
 
 ```sh
 nim c -d:release --path:src -o:/tmp/factory-export tools/export_posttrain.nim
 for variant in factory-commons either-or fragile-plant abundant-feed; do
-  /tmp/factory-export "/tmp/factory-${variant}" 10 1 "$variant" canonical 0
+  /tmp/factory-export "/tmp/factory-${variant}" 10 1 "$variant" mixed 0
 done
 ```
 
 The steward supplies proposals for complete published games: three cogs,
 15 shifts, and 60 ticks per shift. The engine's ordinary early endings remain
 valid. The exporter freezes observations, parses orders, applies them, and
-records actual per-tick actions and resulting frames without changing simulation.
+plays each shift through the production kernel. Applied orders may be blocked
+by the floor rules; an installed order does not guarantee each primitive succeeds.
 
-Private `trajectories.jsonl`, `execution.jsonl`, and `manifest.json` files retain
-source revision, exact messages, hashes, installed orders, event intervals,
-actions, frames, and outcomes. Teacher rows have no inference request, platform
-call identifier, or behavior log probabilities. Files use private permissions.
+The original `train.jsonl`, `validation.jsonl`, and `manifest.json` format
+is preserved. Rows record wording metadata and exact message hashes.
+Mixed selection advances once per game. Seed families exclude variant and
+wording; multiples of five enter validation. Held-out wordings are rejected.
+Output directories are private and must not already exist.
 
-These are candidates. Convert with Coworld's `export_complete_episodes`, then
-use Metta's independent source-hash review gate before label export. Keep each
-`factory-commons-SEED` family together across game variants and wordings.
-No automatic train/validation files are emitted. At least ten games are required;
-existing destinations and held-out wording exports are rejected.
-
-## Native evidence and validation
-
-Optional `FACTORY_COMMONS_HOST_TRACE_PATH` and `FACTORY_COMMONS_ATTEMPT_TRACE_DIR`
-capture private host decisions and actual model attempts. Set
-`FACTORY_COMMONS_SOURCE_REVISION` to the qualified revision. Evidence preserves
-request bodies, retry messages, hashes, raw responses, parse results, failures,
-installed orders, actions, and replay frames. Keep these files private.
+## Validation
 
 ```sh
-python3 tools/test_prompt_games.py /tmp/factory-bridge /tmp/original-factory-bridge
+python3 tools/test_prompt_games.py /tmp/factory-bridge
 python3 tools/test_export_posttrain.py /tmp/factory-export
-python3 tools/test_native_prompts.py /tmp/factory-game /tmp/factory-player /tmp/factory-native
 ```
 
-The prompt panel plays 101 complete games with eight original numeric comparisons.
-The export panel checks 40 games. The native panel plays eleven published games
-with real host/player processes and a reserved closed inference endpoint;
-`--smoke` runs two canonical variants. These checks establish invariants and
-execution, not successful provider inference or improved learning.
+The wording workflow plays 41 complete games across all four variants, including
+private notes, normalized orders, and a kernel-blocked strip order.
+The export workflow checks 40 complete games, seed-family separation, and
+action grammar. These checks establish mechanics and protocol behavior,
+not better learning or resistance to policy collapse.
 
 ## Numeric reinforcement learning
 

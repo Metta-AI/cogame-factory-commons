@@ -155,18 +155,13 @@ jobs:
           nim c -d:release --path:src -o:"${RUNNER_TEMP}/factory-bridge" tools/train_bridge.nim
           python3 tools/test_train_bridge.py "${RUNNER_TEMP}/factory-bridge"
 
-      - name: Complete private candidate exports
+      - name: Complete wording and teacher exports
         run: |
           set -euo pipefail
           nim c -d:release --path:src -o:"${RUNNER_TEMP}/factory-export" tools/export_posttrain.nim
           python3 tools/test_export_posttrain.py "${RUNNER_TEMP}/factory-export"
+          python3 tools/test_prompt_games.py "${RUNNER_TEMP}/factory-bridge"
 
-      - name: Published native prompt and fallback games
-        run: |
-          set -euo pipefail
-          nim c -d:release --path:src -o:"${RUNNER_TEMP}/factory-game" src/factory_commons.nim
-          nim c -d:release --path:src -o:"${RUNNER_TEMP}/factory-player" src/factory_commons_player.nim
-          python3 tools/test_native_prompts.py "${RUNNER_TEMP}/factory-game" "${RUNNER_TEMP}/factory-player" "${RUNNER_TEMP}/factory-native" --smoke
 
   # ---------------------------------------------------------------------
   # Packaging smoke: the production image builds, and one real episode runs

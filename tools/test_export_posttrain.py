@@ -1,154 +1,71 @@
-"""Export complete Factory Commons games and verify installed orders and tick evidence."""
+"""Check complete seeded mixed-wording exports for all four Factory Commons variants."""
 
-import hashlib
 import json
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-EXPORTER = Path(sys.argv[1]).resolve()
-OUTPUT = Path(tempfile.mkdtemp(prefix="factory-commons-source-export-"))
-revision = subprocess.check_output(
-    ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
-).strip()
+ROOT = Path(__file__).resolve().parent.parent
 VARIANTS = ("factory-commons", "either-or", "fragile-plant", "abundant-feed")
-VOCABULARY = {
-    "wait",
-    "move_n",
-    "move_s",
-    "move_e",
-    "move_w",
-    "grasp",
-    "drop",
-    "press",
-    "strip",
-    "fix",
-}
-for variant in VARIANTS:
-    output = OUTPUT / variant
-    subprocess.run(
-        [str(EXPORTER), str(output), "10", "1", variant],
-        cwd=ROOT,
-        check=True,
-        timeout=600,
-    )
-    manifest = json.loads((output / "manifest.json").read_text())
-    assert manifest["source_revision"] == revision and len(manifest["runs"]) == 10
-    assert (
-        not (output / "train.jsonl").exists()
-        and not (output / "validation.jsonl").exists()
-    )
-    episodes, decisions, executions = {}, {}, {}
-    for filename in ("manifest.json", "trajectories.jsonl", "execution.jsonl"):
-        assert (output / filename).stat().st_mode & 0o777 == 0o600
-    for line in (output / "trajectories.jsonl").read_text().splitlines():
-        row = json.loads(line)
-        assert row["source_revision"] == revision
-        episode = row["episode_id"]
-        if row["event_type"] == "episode":
-            episodes[episode] = row
-            continue
-        decisions.setdefault(episode, []).append(row)
-        assert row["visibility"] == "private" and row["action_status"] == "accepted"
-        (attempt,) = row["attempts"]
-        assert attempt["origin"] == "teacher" and attempt["request"] is None
-        assert (
-            attempt["platform_call_id"] is None and attempt["behavior_logprobs"] is None
-        )
-        assert (
-            row["selected_attempt_id"] == attempt["attempt_id"] and attempt["accepted"]
-        )
-        assert (
-            row["executed_action"]
-            == attempt["parsed_action"]
-            == json.loads(attempt["response"])
-        )
-        view = row["observation"]
-        assert all("notes" not in other for other in view["cogs"])
-        metadata = view["prompt_template"]
-        assert (
-            metadata["bank"] == "factory-commons-rules-v1"
-            and metadata["variant"] == "canonical"
-        )
-        for message in attempt["prompt"]:
-            assert (
-                metadata[message["role"] + "_sha256"].lower()
-                == hashlib.sha256(message["content"].encode()).hexdigest()
+
+if __name__ == "__main__":
+    binary = Path(sys.argv[1]).resolve()
+    with tempfile.TemporaryDirectory() as temp:
+        for variant in VARIANTS:
+            output = Path(temp) / variant
+            subprocess.run(
+                [str(binary), str(output), "10", "1", variant, "mixed", "0"],
+                cwd=ROOT,
+                check=True,
             )
-    with (output / "execution.jsonl").open() as stream:
-        for line in stream:
-            row = json.loads(line)
-            executions.setdefault(row["episode_id"], []).append(row)
-            assert row["visibility"] == "private" and row["source_revision"] == revision
-    assert len(episodes) == 10 and set(episodes) == set(decisions) == set(executions)
-    for episode, outcome in episodes.items():
-        rows, shifts = decisions[episode], executions[episode]
-        assert (
-            outcome["status"] == "completed"
-            and outcome["outcome"]["reason"] == "complete"
-        )
-        assert (
-            outcome["outcome"]["shifts"] == 15
-            and outcome["outcome"]["ending"] == "shift_limit"
-        )
-        assert len(rows) == 45 and len(shifts) == 15
-        assert sum(row["terminal"] for row in rows) == 1 and rows[-1]["terminal"]
-        last_orders = None
-        for index, shift in enumerate(shifts):
-            batch = rows[index * 3 : (index + 1) * 3]
-            assert shift["decision_ids"] == [row["decision_id"] for row in batch]
-            assert (
-                shift["start_tick"] == index * 60
-                and shift["end_tick"] == (index + 1) * 60
-            )
-            assert [frame["t"] for frame in shift["frames"]] == list(
-                range(index * 60, (index + 1) * 60)
-            )
-            assert len(shift["kernel_actions"]) == 60
+            manifest = json.loads((output / "manifest.json").read_text())
+            assert len(manifest["runs"]) == 10
+            assert [run["prompt_selection"]["variant"] for run in manifest["runs"]] == [
+                "canonical",
+                "plain",
+                "numbered",
+                "questions",
+                "reordered",
+            ] * 2
             assert all(
-                len(actions) == 3 and set(actions) <= VOCABULARY
-                for actions in shift["kernel_actions"]
+                run["decisions"] == 3 * run["shifts_played"]
+                and run["shifts_played"] == 15
+                and len(run["scores"]) == 3
+                for run in manifest["runs"]
             )
-            assert shift["terminal"] == (index == 14)
-            assert shift["event_end"] - shift["event_start"] == len(shift["events"])
-            if index:
-                assert shift["event_start"] == shifts[index - 1]["event_end"]
-            orders = [event for event in shift["events"] if event["k"] == "order"]
-            assert len(orders) == 3
-            public = None
-            for seat, (row, order) in enumerate(zip(batch, orders, strict=True)):
-                assert row["seat"] == str(seat) and order["seat"] == seat
-                assert row["executed_action"] == {
-                    key: order[key] for key in ("job", "cube", "say", "notes")
-                }
-                assert order["source"] == "scripted"
-                view = row["observation"]
-                cogs = [
-                    {key: value for key, value in cog.items() if key != "you"}
-                    for cog in view["cogs"]
+            families, counts = {}, {}
+            for split in ("train", "validation"):
+                rows = [
+                    json.loads(line)
+                    for line in (output / f"{split}.jsonl").read_text().splitlines()
                 ]
-                snapshot = (view["machine"], cogs, view["history"], view["bananas"])
-                if seat == 0:
-                    public = snapshot
-                assert snapshot == public
-                if last_orders is not None:
-                    assert [cog["lastOrder"] for cog in cogs] == last_orders
-            last_orders = [
-                {key: order[key] for key in ("job", "cube")} for order in orders
-            ]
-        for seat in range(3):
-            assert (
-                outcome["participant_outcomes"][str(seat)]["score"]
-                == outcome["outcome"]["scores"][seat]
+                assert len(rows) == manifest[split + "_examples"] > 0
+                families[split] = {row["seed"] for row in rows}
+                for row in rows:
+                    assert row["game"] == "factory-commons"
+                    assert [message["role"] for message in row["prompt"]] == [
+                        "system",
+                        "user",
+                    ]
+                    order = json.loads(row["completion"][0]["content"])
+                    assert order["job"] in {
+                        "operate",
+                        "strip",
+                        "maintain",
+                        "eat",
+                        "idle",
+                    }
+                    assert order["cube"] in {"pink", "blue", "any"}
+                    assert len(order["notes"]) <= 320 and len(order["say"]) <= 90
+                    assert row["prompt_template"]["variant"] not in (
+                        "heldout-briefing",
+                        "heldout-reference",
+                    )
+                    counts[row["seed"]] = counts.get(row["seed"], 0) + 1
+            assert families["train"].isdisjoint(families["validation"])
+            assert all(
+                counts[f"factory-commons-{run['seed']}"] == run["decisions"]
+                for run in manifest["runs"]
             )
-    assert {row["seed_family"] for row in episodes.values()} == {
-        f"factory-commons-{seed}" for seed in range(1, 11)
-    }
-    print(
-        variant,
-        "10 complete exports; frozen observations, hashes, installed orders and tick evidence PASS",
-        flush=True,
-    )
-print("Evidence:", OUTPUT)
+            print(variant, "10 complete mixed exports PASS", flush=True)

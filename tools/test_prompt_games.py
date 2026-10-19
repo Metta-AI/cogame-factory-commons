@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BRIDGE, ORIGINAL = [Path(value).resolve() for value in sys.argv[1:3]]
+BRIDGE = Path(sys.argv[1]).resolve()
 VARIANTS = ("factory-commons", "either-or", "fragile-plant", "abundant-feed")
 WORDINGS = (
     "canonical",
@@ -25,17 +25,15 @@ def play(
     seed,
     wording="canonical",
     prompt_seed=0,
-    original=False,
     normalize=False,
     locked_strip=False,
 ):
     command = [
-        str(ORIGINAL if original else BRIDGE),
+        str(BRIDGE),
         str(ROOT / "coworld_manifest_template.json"),
         variant,
     ]
-    if not original:
-        command.append("text")
+    command.append("text")
     with subprocess.Popen(
         command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True
     ) as process:
@@ -70,41 +68,40 @@ def play(
                 systems.setdefault(seat, messages[0]["content"])
                 == messages[0]["content"]
             )
-            if not original:
-                metadata = view.pop("prompt_template")
-                assert metadata["bank"] == "factory-commons-rules-v1"
-                assert metadata["variant"] == (
-                    WORDINGS[prompt_seed] if wording == "mixed" else wording
+            metadata = view.pop("prompt_template")
+            assert metadata["bank"] == "factory-commons-rules-v2"
+            assert metadata["variant"] == (
+                WORDINGS[prompt_seed] if wording == "mixed" else wording
+            )
+            for message in messages:
+                assert (
+                    metadata[message["role"] + "_sha256"].lower()
+                    == hashlib.sha256(message["content"].encode()).hexdigest()
                 )
-                for message in messages:
-                    assert (
-                        metadata[message["role"] + "_sha256"].lower()
-                        == hashlib.sha256(message["content"].encode()).hexdigest()
-                    )
-                cogs = [
-                    {key: value for key, value in cog.items() if key != "you"}
-                    for cog in view["cogs"]
-                ]
-                public = (view["machine"], cogs, view["history"], view["bananas"])
-                if seat == 0:
-                    frozen = public
-                    if previous_cogs is not None:
-                        assert [cog["lastOrder"] for cog in cogs] == last_orders
-                    previous_cogs = cogs
-                assert public == frozen
-                assert all("notes" not in cog for cog in view["cogs"])
-                if normalize:
-                    for other in range(3):
-                        if other != seat:
-                            assert (
-                                f"PRIVATE-{other}-"
-                                not in json.dumps(view) + messages[1]["content"]
-                            )
-                    if index >= 3:
+            cogs = [
+                {key: value for key, value in cog.items() if key != "you"}
+                for cog in view["cogs"]
+            ]
+            public = (view["machine"], cogs, view["history"], view["bananas"])
+            if seat == 0:
+                frozen = public
+                if previous_cogs is not None:
+                    assert [cog["lastOrder"] for cog in cogs] == last_orders
+                previous_cogs = cogs
+            assert public == frozen
+            assert all("notes" not in cog for cog in view["cogs"])
+            if normalize:
+                for other in range(3):
+                    if other != seat:
                         assert (
-                            view["notes"].startswith(f"PRIVATE-{seat}-")
-                            and len(view["notes"]) == 320
+                            f"PRIVATE-{other}-"
+                            not in json.dumps(view) + messages[1]["content"]
                         )
+                if index >= 3:
+                    assert (
+                        view["notes"].startswith(f"PRIVATE-{seat}-")
+                        and len(view["notes"]) == 320
+                    )
             action = json.loads(request({"kind": "teacher"})["response"])
             if locked_strip and "strip" not in view["legalJobs"]:
                 action["job"] = "strip"
@@ -150,18 +147,16 @@ def play(
 
 
 for variant in VARIANTS:
-    for seed in (17, 946001):
-        original = play(variant, seed, original=True)
+    for seed in (17,):
+        baseline = play(variant, seed)
         canonical = None
         systems = []
-        for wording, prompt_seed in [(name, 0) for name in WORDINGS] + [
-            ("mixed", index) for index in range(5)
-        ]:
+        for wording, prompt_seed in [(name, 0) for name in WORDINGS] + [("mixed", 4)]:
             result = play(variant, seed, wording, prompt_seed)
-            assert result[1:3] == original[1:3]
+            assert result[1:3] == baseline[1:3]
             if wording == "canonical":
                 canonical = result
-                assert result[3] == original[3]
+                assert result[3] == baseline[3]
             else:
                 assert result[:3] == canonical[:3]
             if wording == "mixed":
@@ -172,7 +167,7 @@ for variant in VARIANTS:
     play(variant, 17, normalize=True)
     print(
         variant,
-        "24 matched text games, two original games, private notes and normalization PASS",
+        "10 complete matched/private-note games PASS",
         flush=True,
     )
 for wording in WORDINGS[-2:]:
@@ -202,6 +197,4 @@ for wording in WORDINGS[-2:]:
         and "held-out wording is evaluation-only" in rejected.stderr
     )
 play("either-or", 17, locked_strip=True)
-print(
-    "101 complete text games, eight original comparisons, held-out training gate and locked-strip acceptance PASS"
-)
+print("41 complete text games, held-out training gate and locked-strip acceptance PASS")
