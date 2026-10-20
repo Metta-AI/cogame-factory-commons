@@ -43,7 +43,8 @@ by the floor rules; an installed order does not guarantee each primitive succeed
 
 The original `train.jsonl`, `validation.jsonl`, and `manifest.json` format
 is preserved. Rows record wording metadata and exact message hashes.
-Mixed selection advances once per game. Seed families exclude variant and
+Mixed selection cycles separately within each split, retaining all five training
+wordings. Episode IDs include wording for matched collections. Seed families exclude variant and
 wording; multiples of five enter validation. Held-out wordings are rejected.
 Output directories are private and must not already exist.
 
