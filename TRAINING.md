@@ -44,7 +44,8 @@ by the floor rules; an installed order does not guarantee each primitive succeed
 The original `train.jsonl`, `validation.jsonl`, and `manifest.json` format
 is preserved. Rows record wording metadata and exact message hashes.
 Mixed selection cycles separately within each split, retaining all five training
-wordings. Episode IDs include wording for matched collections. Seed families exclude variant and
+wordings. Episode IDs include requested selection, resolved wording, and prompt seed
+for matched collections. Seed families exclude variant and
 wording; multiples of five enter validation. Held-out wordings are rejected.
 Output directories are private and must not already exist.
 
@@ -69,7 +70,7 @@ bridge and pass it to Metta's Coworld recipe:
 ```bash
 nim c -d:release --path:src -o:/tmp/factory-train-bridge tools/train_bridge.nim
 python3 tools/test_train_bridge.py /tmp/factory-train-bridge
-uv run ./tools/run.py recipes.external.coworld.train \
+uv run tool recipes.external.coworld.train \
   'command=["/absolute/path/to/factory-train-bridge","/absolute/path/to/coworld_manifest_template.json","factory-commons"]' \
   players=3 total_timesteps=100000
 ```
