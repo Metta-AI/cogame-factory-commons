@@ -13,7 +13,11 @@ proc seedOf(value: string): int =
     hash = (hash xor uint32(ord(ch))) * 16777619'u32
   int(hash and 0x7fffffff'u32)
 
-proc decision(game: Sim, seat, id: int): JsonNode =
+proc decision(game: Sim, seat, id: int, selection: PromptSelection, textMode: bool): JsonNode =
+  let system = systemPrompt(game, seat, selection)
+  let user = userPrompt(game, seat, OperatorPrompt)
+  var view = game.observationJson(seat)
+  if textMode: view["prompt_template"] = selection.promptMetadata(system, user)
   %*{
     "kind": "decision",
     "game": "factory-commons",
@@ -21,14 +25,18 @@ proc decision(game: Sim, seat, id: int): JsonNode =
     "seat": seat,
     "engine_seat": seat,
     "turn": game.shift + 1,
-    "semantic_view": game.observationJson(seat),
+    "semantic_view": view,
     "inbox": [],
     "messages": [
-      {"role": "system", "content": systemPrompt(game, seat)},
-      {"role": "user", "content": userPrompt(game, seat, OperatorPrompt)}
+      {"role": "system", "content": system},
+      {"role": "user", "content": user}
     ],
     "speech_messages": [],
-    "action_schema": {"type": "object", "required": ["job", "cube"]},
+    "action_schema": {"type": "object", "properties": {
+      "job": {"type": "string", "enum": ["operate", "strip", "maintain", "eat", "idle"]},
+      "cube": {"type": "string", "enum": ["pink", "blue", "any"]},
+      "say": {"type": "string", "maxLength": MaxSayLen},
+      "notes": {"type": "string", "maxLength": MaxNotesLen}}, "required": ["job", "cube"]},
     "typed_question": newJNull()
   }
 
@@ -72,16 +80,19 @@ proc encoding(game: Sim, seat, id: int): JsonNode =
 
 when isMainModule:
   let args = commandLineParams()
-  if args.len notin 1 .. 2:
-    quit("usage: factory-train-bridge MANIFEST [VARIANT]", 1)
-  let variant = if args.len == 2: args[1] else: "factory-commons"
+  if args.len notin 1 .. 3:
+    quit("usage: factory-train-bridge MANIFEST [VARIANT] [text]", 1)
+  let variant = if args.len >= 2: args[1] else: "factory-commons"
+  let textMode = args.len == 3
+  if textMode: doAssert args[2] == "text"
+  var selection: PromptSelection
   let manifest = parseFile(args[0])
   var variantConfig: JsonNode
   for entry in manifest["variants"]:
     if entry["id"].getStr() == variant:
       variantConfig = entry["game_config"]
   doAssert not variantConfig.isNil, "unknown variant: " & variant
-  var game: Sim
+  var game, view: Sim
   var seat = 0
   var id = 0
   while not stdin.endOfFile:
@@ -89,6 +100,10 @@ when isMainModule:
     var response: JsonNode
     case request["kind"].getStr()
     of "reset":
+      selection = promptSelection(request)
+      if textMode and selection.selectedVariant in {pvHeldoutBriefing, pvHeldoutReference} and
+          (not request.hasKey("split") or request["split"].getStr() == "train"):
+        raise newException(ValueError, "held-out wording is evaluation-only")
       doAssert request["players"].getInt() == 3
       var config = defaultGameConfig()
       let runtimeConfig = copy(variantConfig)
@@ -96,27 +111,30 @@ when isMainModule:
       runtimeConfig["seed"] = %seedOf(request["seed"].getStr())
       config.update($runtimeConfig)
       game = initSim(config)
+      view = game
       seat = 0
       id = 0
-      response = game.decision(seat, id)
+      response = view.decision(seat, id, selection, textMode)
     of "encode":
       doAssert not game.done
       response = game.encoding(seat, id)
     of "teacher":
       doAssert not game.done
-      let order = scriptedOrder(game, seat, skSteward)
-      response = %*{"response": $(%*{"job": $order.job, "cube": $order.cube})}
+      let order = scriptedOrder(view, seat, skSteward)
+      response = %*{"response": $(if textMode: orderJson(order) else: %*{"job": $order.job, "cube": $order.cube})}
     of "step":
       doAssert not game.done and request["decision_id"].getInt() == id
       let action = parseJson(request["response"].getStr())
       var order = parseOrder(action)
-      doAssert $order.job in game.legalJobs()
+      if not textMode: doAssert $order.job in game.legalJobs()
       order.source = osLlm
       game.applyOrder(seat, order)
+      let installed = orderJson(game.cogs[seat].order)
       inc seat
       if seat == 3:
         game.playShift()
         game.checkEnd(false)
+        view = game
         seat = 0
       inc id
       var observation: JsonNode
@@ -127,8 +145,8 @@ when isMainModule:
           scores[$index] = outcome["scores"][index]
         observation = %*{"kind": "terminal", "scores": scores}
       else:
-        observation = game.decision(seat, id)
-      response = %*{"kind": "accepted", "action": action, "observation": observation}
+        observation = view.decision(seat, id, selection, textMode)
+      response = %*{"kind": "accepted", "action": (if textMode: installed else: action), "observation": observation}
     else:
       raise newException(ValueError, "unknown command: " & request["kind"].getStr())
     stdout.writeLine($response)

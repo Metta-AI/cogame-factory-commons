@@ -1,41 +1,76 @@
 # Factory Commons training
 
-Factory Commons has a local simulator and hosted text players. Export complete
-games for Metta post-training with the same per-seat prompts and reply parser
-as the hosted player:
+## Episode-stable prompt variants
 
-```bash
-nimby sync nimby.lock
-nim r --path:src tools/export_posttrain.nim /tmp/factory-default 10 1 factory-commons
-nim r --path:src tools/export_posttrain.nim /tmp/factory-either 10 1 either-or
-nim r --path:src tools/export_posttrain.nim /tmp/factory-fragile 10 1 fragile-plant
-nim r --path:src tools/export_posttrain.nim /tmp/factory-abundant 10 1 abundant-feed
+`canonical` preserves the original system prompt. Five training wordings
+(`canonical`, `plain`, `numbered`, `questions`, `reordered`) paraphrase the role,
+other cogs, job responsibilities, and scoring. The v2 bank preserves machine
+facts, configuration-derived numbers, strategic hints, and output grammar.
+`mixed` selects using an explicit nonnegative `promptSeed % 5`, independently
+of simulator randomness. Selection remains fixed throughout an episode.
+`heldout-briefing` and `heldout-reference` are evaluation-only.
+
+## Complete text collection
+
+The bridge accepts an optional third argument, `text`. Reset accepts
+`promptVariant`, `promptSeed`, and `split`; held-out training collection is rejected.
+Full actions include `job`, `cube`, public `say`, and private `notes` through
+the production parser. Text mode retains the hosted parser's tolerance for
+`strip` orders even when the floor kernel cannot perform them. Numeric masks
+retain their existing meaning.
+
+All three seats observe one frozen state before any new order is installed.
+This fixes the former bridge/export leak of earlier seats' current orders.
+Seat-visible observations contain only that seat's private notes, exact message
+hashes, bank version, resolved wording, and selection seed.
+
+## Teacher exports
+
+Build once and export from a clean committed checkout:
+
+```sh
+nim c -d:release --path:src -o:/tmp/factory-export tools/export_posttrain.nim
+for variant in factory-commons either-or fragile-plant abundant-feed; do
+  /tmp/factory-export "/tmp/factory-${variant}" 10 1 "$variant" mixed 0
+done
 ```
 
-The exporter reads each certified `game_config` from
-`coworld_manifest_template.json`, runs seeded games with the published steward
-player, and writes `train.jsonl`, `validation.jsonl`,
-and `manifest.json`. Seeds divisible by five go to validation, keeping each
-game entirely in one split. Each standing order passes the hosted parser and
-native simulator. The exporter refuses an existing output directory.
+The steward supplies proposals for complete published games: three cogs,
+15 shifts, and 60 ticks per shift. The engine's ordinary early endings remain
+valid. The exporter freezes observations, parses orders, applies them, and
+plays each shift through the production kernel. Applied orders may be blocked
+by the floor rules; an installed order does not guarantee each primitive succeeds.
 
-Train the text policy with Metta's post-training CLI:
+The original `train.jsonl`, `validation.jsonl`, and `manifest.json` format
+is preserved. Rows record wording metadata and exact message hashes.
+Mixed selection cycles separately within each split, retaining all five training
+wordings. Episode IDs include requested selection, resolved wording, and prompt seed
+for matched collections. Seed families exclude variant and
+wording; multiples of five enter validation. Held-out wordings are rejected.
+Output directories are private and must not already exist.
 
-```bash
-uv run python -m metta_posttrain.train --dataset /tmp/factory-default \
-  --output /tmp/factory-model --model Qwen/Qwen2.5-0.5B-Instruct \
-  --max-steps 100 --max-length 4096
+## Validation
+
+```sh
+python3 tools/test_prompt_games.py /tmp/factory-bridge
+python3 tools/test_export_posttrain.py /tmp/factory-export
 ```
 
-The dataset imitates scripted play; its loss does not measure policy quality.
+The wording workflow plays 41 complete games across all four variants, including
+private notes, normalized orders, and a kernel-blocked strip order.
+The export workflow checks 40 complete games, seed-family separation, and
+action grammar. These checks establish mechanics and protocol behavior,
+not better learning or resistance to policy collapse.
+
+## Numeric reinforcement learning
 
 For native PufferLib reinforcement learning, compile the persistent decision
 bridge and pass it to Metta's Coworld recipe:
 
 ```bash
-nim c -d:release --path:src -o:factory-train-bridge tools/train_bridge.nim
-python3 tools/test_train_bridge.py ./factory-train-bridge
-uv run ./tools/run.py recipes.external.coworld.train \
+nim c -d:release --path:src -o:/tmp/factory-train-bridge tools/train_bridge.nim
+python3 tools/test_train_bridge.py /tmp/factory-train-bridge
+uv run tool recipes.external.coworld.train \
   'command=["/absolute/path/to/factory-train-bridge","/absolute/path/to/coworld_manifest_template.json","factory-commons"]' \
   players=3 total_timesteps=100000
 ```

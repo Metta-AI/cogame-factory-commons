@@ -79,6 +79,7 @@ wasm bundle, never a pod.</p>
 
 type
   GameState = object
+    selection: PromptSelection
     config: GameConfig
     sim: Sim
     prompts: seq[string]
@@ -403,7 +404,7 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
       ## outside the lock on a snapshot; only this thread mutates the sim, so
       ## the snapshot cannot go stale.
       let batchStart = epochTime()
-      var orders = client.decideAll(simCopy, seats, prompts, scripted)
+      var orders = client.decideAll(simCopy, seats, prompts, scripted, state.selection)
       let batchSeconds = epochTime() - batchStart
 
       let actionDeadline = epochTime() + config.llmTimeoutSeconds.float
@@ -623,6 +624,7 @@ proc runGameServer*(config: GameConfig, runtimeConfig: RuntimeConfig) =
     raise newException(FactoryError,
       "config declares " & $config.numAgents & " seats but only " &
       $config.tokens.len & " tokens")
+  state.selection = promptSelection(parseJson(runtimeConfig.config))
   state.config = config
   state.sim = initSim(config)
   state.prompts = newSeq[string](config.numAgents)

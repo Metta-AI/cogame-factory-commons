@@ -186,3 +186,6 @@ the lever, and a red `WHO BROKE IT — RATCHET · CAP 100 → 84` banner. Checke
 ## Licence
 
 MIT. See [`LICENSE`](LICENSE).
+
+See [TRAINING.md](TRAINING.md) for prompt variants, private provenance, full text
+collection, and seeded teacher exports.
