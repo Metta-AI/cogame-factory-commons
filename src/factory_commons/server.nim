@@ -33,7 +33,7 @@ import
   curly,
   mummy,
   mummy/routers,
-  ./sim, ./scripted, ./llm, ./broadcast, ./global, ./replays, ./wire_constants
+  ./sim, ./scripted, ./llm, ./broadcast, ./global, ./replays, ./wire_constants, ./native_capture
 
 const
   BroadcastEveryTicks = 6
@@ -80,6 +80,7 @@ wasm bundle, never a pod.</p>
 type
   GameState = object
     selection: PromptSelection
+    capture: RuntimeCapture
     config: GameConfig
     sim: Sim
     prompts: seq[string]
@@ -283,6 +284,7 @@ proc finishEpisode(runtimeConfig: RuntimeConfig) =
     "COGAME_RESULTS_METHOD")
   writeArtifact(runtimeConfig.replayUri, replayData, "application/json",
     "COGAME_SAVE_REPLAY_METHOD")
+  if state.capture != nil: state.capture.finishCapture(results)
   log "artifacts written (" & $replayData.len & " replay bytes); serving " &
     $grace & "s of shutdown grace"
   withLock stateLock:
@@ -403,8 +405,18 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
       ## The slow part (Claude, ONE parallel batch for legacy prompts) runs
       ## outside the lock on a snapshot; only this thread mutates the sim, so
       ## the snapshot cannot go stale.
+      var captures: seq[CapturedDecision]
+      var origins: seq[string]
+      if state.capture != nil:
+        for seat in seats:
+          let origin = if external[seat]: "external"
+            elif scripted[seat] != skNone: $scripted[seat] else: "model"
+          origins.add(origin)
+          captures.add(state.capture.beginDecision($(simCopy.shift + 1) & "-" & $seat,
+            "native-" & origin & "-slot-" & $seat, simCopy.observationJson(seat),
+            state.selection.selectionMetadata(), simCopy.nativeStateHash()))
       let batchStart = epochTime()
-      var orders = client.decideAll(simCopy, seats, prompts, scripted, state.selection)
+      var orders = client.decideAll(simCopy, seats, prompts, scripted, state.selection, captures)
       let batchSeconds = epochTime() - batchStart
 
       let actionDeadline = epochTime() + config.llmTimeoutSeconds.float
@@ -431,6 +443,9 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
                 " missed action deadline; using steward fallback"
 
       withLock stateLock:
+        let startEvent = if state.capture != nil: state.sim.events.len else: 0
+        let startFrame = if state.capture != nil: state.sim.frames.len else: 0
+        var tickHashes: seq[string]
         for index, seat in seats:
           var order = orders[index]
           order.latencyMs = int(batchSeconds * 1000.0)
@@ -441,10 +456,15 @@ proc runGame(runtimeConfig: RuntimeConfig) {.gcsafe.} =
         ## The tick loop, with a spectator frame every few ticks.
         for _ in 0 ..< config.ticksPerShift:
           state.sim.stepTick()
+          if state.capture != nil: tickHashes.add(state.sim.nativeStateHash())
           if state.sim.tick mod BroadcastEveryTicks == 0:
             state.broadcastLocked()
         state.sim.closeShift()
         state.sim.checkEnd(false)
+        if state.capture != nil:
+          for index, seat in seats:
+            state.capture.applied(captures[index], seat, state.sim.cogs[seat].order,
+              state.sim, startEvent, startFrame, tickHashes, origins[index])
         state.sendPlayerStates()
         state.broadcastLocked()
 
@@ -627,6 +647,7 @@ proc runGameServer*(config: GameConfig, runtimeConfig: RuntimeConfig) =
   state.selection = promptSelection(parseJson(runtimeConfig.config))
   state.config = config
   state.sim = initSim(config)
+  state.capture = newRuntimeCapture(state.sim, runtimeConfig.resultsUri, runtimeConfig.replayUri)
   state.prompts = newSeq[string](config.numAgents)
   state.scripted = newSeq[ScriptKind](config.numAgents)
   state.external = newSeq[bool](config.numAgents)

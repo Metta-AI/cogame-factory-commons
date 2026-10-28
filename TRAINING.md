@@ -24,7 +24,7 @@ This fixes the former bridge/export leak of earlier seats' current orders.
 Seat-visible observations contain only that seat's private notes, exact message
 hashes, bank version, resolved wording, and selection seed.
 
-## Teacher exports
+## Teacher exports (scripted mechanics only)
 
 Build once and export from a clean committed checkout:
 
@@ -45,8 +45,9 @@ The original `train.jsonl`, `validation.jsonl`, and `manifest.json` format
 is preserved. Rows record wording metadata and exact message hashes.
 Mixed selection cycles separately within each split, retaining all five training
 wordings. Episode IDs include requested selection, resolved wording, and prompt seed
-for matched collections. Seed families exclude variant and
-wording; multiples of five enter validation. Held-out wordings are rejected.
+for matched collections. Historical seed labels exclude variant and
+wording; multiples of five enter validation. These aliases do not establish
+physical independence because the simulator does not consume the seed. Held-out wordings are rejected.
 Output directories are private and must not already exist.
 
 ## Validation
@@ -82,3 +83,74 @@ job and cube heads with widths 5 and 3. The job mask follows the game's
 published legal-job list, including strip lockout. The steward provides
 opponent actions and optional teacher labels. Metta recipe support is in
 #24679, stacked on #24573.
+
+## Ordinary native private capture
+
+Set `COGAME_SAVE_TRAJECTORY_URI` to a private, episode-scoped destination to
+collect decisions from the ordinary game server. The public player interface,
+standing-order parser, simultaneous three-seat views, physical kernel and clocks
+are unchanged. The private destination must differ from the public results and
+replay destinations. Without it, the capture path does no private projection or
+hashing.
+
+Records preserve the actual native request body and safe headers, received
+response body bytes exposed by Curly, status, receipt/request IDs, failed attempts,
+parsed proposals and installed standing orders. These are the HTTP entity bytes
+returned by the native transport; compressed wire bytes and raw header bytes are
+not available and are not claimed. Authorization and cookie headers are excluded.
+The native parser remains tolerant, while learning eligibility requires strict
+JSON and unchanged supplied types and values. Supported fences and omitted native
+defaults can qualify; normalization, truncation, ignored fields, duplicate keys,
+nonfinite numbers, fallback and external actions cannot become selected model
+labels. Provider receipt verification remains a separate admission requirement. Recursive Unicode scalar checks also protect
+private JSONL when the unchanged native parser accepts an invalid string or key.
+Those rows retain their original native evidence serialization bytes as base64,
+with no selected attempt, no action target and no active attempts; actual
+fallbacks remain fallbacks. The episode is marked as an evidence failure. The
+native parser and public writer are unchanged, so malformed notebook bytes can
+still persist into a later native request or public replay; the fixture report
+keeps that runtime limitation separate from the capture safety result.
+
+`notes` overwrites the prior notebook, including when omitted or empty. Frozen
+seat views contain only that seat's notebook, and per-seat execution metadata
+removes foreign notebooks from order events. Public `say` and previous orders are
+visible next shift. The existing postgame spectator replay already serializes
+order-event notes; this capture change does not change that replay visibility.
+
+An installed `strip` order remains the authoritative standing action even when
+the kernel blocks or redirects its physical work. Per-tick state hashes, actual
+events and replay frames record what happened physically. Primitive control bytes
+are not recorded and are not represented as if they were.
+
+The physical family is bound to the actual initialized floor and module state
+before any history. All four published variants and all unused seed aliases share
+one conservative physical family. Separate causal condition hashes retain the
+active rule and deterministic supply/degradation differences. Changing the seed
+does not produce a new world: the simulator never consumes it. The historical
+offline exporter's seed-modulo partitions therefore establish no independent
+physical holdout. Preserve existing exports as historical mechanics evidence;
+condition or wording holdouts answer only separately predeclared, limited
+questions and must not be reported as independent worlds.
+
+For a complete local native system check, build the ordinary game, bundled player
+and independent checker using the pinned toolchain and dependencies, then run:
+
+```sh
+python tools/test_native_capture.py --game /path/to/factory-commons \
+  --player /path/to/factory-commons-player --variant factory-commons \
+  --output /private/unique-factory-check
+/path/to/check-native /private/unique-factory-check/config.json \
+  /private/unique-factory-check/trajectory.jsonl \
+  /private/unique-factory-check/replay.json 'native fixture only'
+```
+
+The Python harness requires `websockets` for actual spectator and external-player
+WebSocket probes. It preserves 15 shifts × 60 ticks, 12-second batch pacing,
+20-second native HTTP deadlines, one retry and the 20-second shutdown grace. It
+requires HTTP health before players, continuously drains the spectator stream,
+checks Pong/health/client during waits, and logs process/resource and transport
+metrics throughout execution. Runs are bounded to 360 seconds, 16 MiB retained
+output and a 2 GiB free-disk floor. Its sentinel is bound only to loopback, child
+environments exclude provider credentials, and every generated call/receipt is
+explicitly fixture-only. These games produce zero teacher-authorized targets and
+make no claims about model strategy quality or learning.
