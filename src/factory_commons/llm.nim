@@ -23,10 +23,10 @@
 ## deterministic. That fallback is load-bearing, not a nicety.
 
 import
-  std/[json, os, strutils, unicode],
+  std/[json, monotimes, os, strutils, times, unicode],
   bitworld/runtime,
   curly,
-  ./sim, ./scripted, ./prompts
+  ./sim, ./scripted, ./prompts, ./native_capture
 export prompts
 
 const
@@ -692,6 +692,24 @@ proc parseOrder*(payload: JsonNode): Order =
   result = initOrder()
   if payload.isNil or payload.kind != JObject:
     raise newException(FactoryError, "reply is not a JSON object")
+  # Nim JSON strings can contain encoded surrogate code points or invalid UTF-8.
+  # Reject them before cleaning/installation, including ignored fields and keys.
+  # Valid strings and the tolerant JSON/enum/default behavior remain unchanged.
+  var pending = @[payload]
+  while pending.len > 0:
+    let node = pending.pop()
+    case node.kind
+    of JString:
+      if not scalarUtf8(node.getStr()):
+        raise newException(FactoryError, "reply contains non-Unicode text")
+    of JObject:
+      for key, value in node:
+        if not scalarUtf8(key):
+          raise newException(FactoryError, "reply contains a non-Unicode key")
+        pending.add(value)
+    of JArray:
+      for value in node: pending.add(value)
+    else: discard
   let jobNode = payload{"job"}
   if jobNode.isNil or jobNode.kind != JString:
     raise newException(FactoryError, "no job in reply")
@@ -764,7 +782,8 @@ proc decideAll*(
   seats: seq[int],
   prompts: seq[string],
   scripted: seq[ScriptKind],
-  selection: PromptSelection
+  selection: PromptSelection,
+  captures: seq[CapturedDecision] = @[]
 ): seq[Order] =
   ## One order per seat in `seats`, in order. NEVER raises: any failure falls
   ## back to the scripted `steward` order so the episode always advances.
@@ -800,6 +819,9 @@ proc decideAll*(
         user.add("\nYour previous reply was invalid. Respond with ONLY the " &
           "requested JSON object, using one of the listed job and cube values.")
       let request = client.requestFor(sim.systemPrompt(seat, selection), user, seat)
+      if index < captures.len and captures[index] != nil:
+        captures[index].beginAttempt()
+        captures[index].requested(request.body, request.headers)
       batch.post(request.url, request.headers, request.body, $index)
     client.lastBatchSize = batch.len
     client.batches += 1
@@ -809,26 +831,40 @@ proc decideAll*(
     ## raising behaviour is not this module's to define, so a raise from it
     ## must land on the fallback path like any other transport failure.
     var responses: ResponseBatch
+    var captureStarted: MonoTime
+    if captures.len > 0: captureStarted = getMonoTime()
     try:
       responses =
         if client.stub != nil: client.stub(batch)
         else: client.curl.makeRequests(batch, client.timeoutSeconds)
     except CatchableError as error:
       log "llm: batch transport raised: " & cleanError(error.msg)
+      for index in open:
+        if index < captures.len and captures[index] != nil:
+          captures[index].transportFailed(error.msg, (getMonoTime() - captureStarted).inMilliseconds.int)
       break
     var stillOpen: seq[int]
     for position, index in open:
       let seat = seats[index]
       if position >= responses.len:
+        if index < captures.len and captures[index] != nil:
+          captures[index].transportFailed("native batch omitted response", (getMonoTime() - captureStarted).inMilliseconds.int)
         stillOpen.add(index)
         continue
+      if index < captures.len and captures[index] != nil:
+        captures[index].received(responses[position].response, (getMonoTime() - captureStarted).inMilliseconds.int)
+        if responses[position].error.len > 0:
+          captures[index].transportFailed(responses[position].error, (getMonoTime() - captureStarted).inMilliseconds.int)
       try:
         let text = client.textOf(responses[position].response,
           responses[position].error, batch[position].url)
+        if index < captures.len and captures[index] != nil: captures[index].replyText(text)
         var order = parseOrder(extractJsonObject(text))
+        if index < captures.len and captures[index] != nil: captures[index].parsedProposal(order)
         order.source = if attempt == 0: osLlm else: osRetry
         result[index] = order
       except ThrottledError as error:
+        if index < captures.len and captures[index] != nil: captures[index].rejectedAttempt(error.msg)
         ## design.md: "a 429 is logged and that seat is retried in the NEXT
         ## shift's batch". Re-asking a rate limiter that just said no, in the
         ## same second, spends the episode's request budget on a refusal — so
@@ -839,6 +875,7 @@ proc decideAll*(
         result[index] = sim.scriptedOrder(seat, skSteward)
         result[index].source = osFallback
       except CatchableError as error:
+        if index < captures.len and captures[index] != nil: captures[index].rejectedAttempt(error.msg)
         log "llm: seat " & $seat & " attempt " & $attempt & " failed: " &
           cleanError(error.msg)
         stillOpen.add(index)

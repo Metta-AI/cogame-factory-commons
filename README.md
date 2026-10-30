@@ -71,9 +71,12 @@ deterministic **floor kernel** turns it into the per-tick action stream
 `operate`, `strip`, `maintain`, `eat` and `idle`.
 
 ```json
-{"job":"maintain","cube":"any",
- "say":"integrity 71 and falling - I take a cube to the bay, you two press",
- "notes":"Ratchet pulled the override in shift 3; cap is 88 and never coming back"}
+{
+  "job": "maintain",
+  "cube": "any",
+  "say": "integrity 71 and falling - I take a cube to the bay, you two press",
+  "notes": "Ratchet pulled the override in shift 3; cap is 88 and never coming back"
+}
 ```
 
 `say` is capped at **90 runes** and heard by both other seats next shift;
@@ -92,29 +95,29 @@ contains both a defector and a cooperator.
 
 ## Layout
 
-| path | what |
-|---|---|
-| `src/factory_commons.nim` | the game entrypoint. The seed is randomised **before** `config.update`. |
-| `src/factory_commons_player.nim` | the thin prompt-carrying player. Ported from `cogame-bullwhip`. |
-| `src/factory_commons/sim_types.nim` | consts, the wire types, the sim record. **Field order is sacred** — the replay frames are positional integer arrays. |
-| `src/factory_commons/sim_config.nim` | `GameConfig` lifecycle, `config.update`, the variant label. |
-| `src/factory_commons/sim.nim` | the gameplay core: the **ten numbered tick steps**, the shift boundary, the end conditions, `results.json`. Imports and re-exports every sibling. |
-| `src/factory_commons/floor.nim` | the one authored floor and the BFS the kernel walks it with. |
-| `src/factory_commons/machine.nim` | bands, both yield tables, `press` / `strip` / `fix`, banana placement. |
-| `src/factory_commons/kernel.nim` | the floor kernel: one standing order in, one per-tick action out. |
-| `src/factory_commons/scripted.nim` | the three baselines. |
-| `src/factory_commons/llm.nim` | the batched decision layer. Ported from `cogame-bullwhip/src/bullwhip/llm.nim`. |
-| `src/factory_commons/broadcast.nim` | the chrome frame the viewer reads. |
-| `src/factory_commons/global.nim` | the sprite-protocol board emitter and the chrome-JSON smuggling. |
-| `src/factory_commons/replays.nim` | the replay writer, reader and playback model. |
-| `src/factory_commons/server.nim` | routes, the shift loop, the player protocol, the shutdown order. |
-| `client/chrome_common.js` | **byte-for-byte** from `coworld-ctf`. Nothing in it is edited, which is why the wire-constants global keeps the name `window.CTF_WIRE`. |
-| `client/broadcast_core.js` | forked from `coworld-ctf`; the ingest, letterboxing and layer pooling are untouched. |
-| `client/replay_broadcast.html` | the starter's page, minus four element groups, plus one appended game block under a banner comment. |
-| `replay-viewer/` | the static wasm bundle: `factory_commons_replay.nim`, `config.nims`, `static_replay.js`, `static_replay_worker.js`. **All four from `coworld-ctf` only.** |
-| `scripts/art/` | the nano-banana source sheets and the one committed, deterministic generator. |
-| `tools/build_replay_viewer.sh` | the `coworld build` hook. Must stay **executable**. |
-| `tools/ci/` | the CI harness: `docker_smoke.sh`, `viewer_smoke.mjs`, `renderer_fixture.html`, `policies.json`. |
+| path                                 | what                                                                                                                                                      |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/factory_commons.nim`            | the game entrypoint. The seed is randomised **before** `config.update`.                                                                                   |
+| `src/factory_commons_player.nim`     | the thin prompt-carrying player. Ported from `cogame-bullwhip`.                                                                                           |
+| `src/factory_commons/sim_types.nim`  | consts, the wire types, the sim record. **Field order is sacred** — the replay frames are positional integer arrays.                                      |
+| `src/factory_commons/sim_config.nim` | `GameConfig` lifecycle, `config.update`, the variant label.                                                                                               |
+| `src/factory_commons/sim.nim`        | the gameplay core: the **ten numbered tick steps**, the shift boundary, the end conditions, `results.json`. Imports and re-exports every sibling.         |
+| `src/factory_commons/floor.nim`      | the one authored floor and the BFS the kernel walks it with.                                                                                              |
+| `src/factory_commons/machine.nim`    | bands, both yield tables, `press` / `strip` / `fix`, banana placement.                                                                                    |
+| `src/factory_commons/kernel.nim`     | the floor kernel: one standing order in, one per-tick action out.                                                                                         |
+| `src/factory_commons/scripted.nim`   | the three baselines.                                                                                                                                      |
+| `src/factory_commons/llm.nim`        | the batched decision layer. Ported from `cogame-bullwhip/src/bullwhip/llm.nim`.                                                                           |
+| `src/factory_commons/broadcast.nim`  | the chrome frame the viewer reads.                                                                                                                        |
+| `src/factory_commons/global.nim`     | the sprite-protocol board emitter and the chrome-JSON smuggling.                                                                                          |
+| `src/factory_commons/replays.nim`    | the replay writer, reader and playback model.                                                                                                             |
+| `src/factory_commons/server.nim`     | routes, the shift loop, the player protocol, the shutdown order.                                                                                          |
+| `client/chrome_common.js`            | **byte-for-byte** from `coworld-ctf`. Nothing in it is edited, which is why the wire-constants global keeps the name `window.CTF_WIRE`.                   |
+| `client/broadcast_core.js`           | forked from `coworld-ctf`; the ingest, letterboxing and layer pooling are untouched.                                                                      |
+| `client/replay_broadcast.html`       | the starter's page, minus four element groups, plus one appended game block under a banner comment.                                                       |
+| `replay-viewer/`                     | the static wasm bundle: `factory_commons_replay.nim`, `config.nims`, `static_replay.js`, `static_replay_worker.js`. **All four from `coworld-ctf` only.** |
+| `scripts/art/`                       | the nano-banana source sheets and the one committed, deterministic generator.                                                                             |
+| `tools/build_replay_viewer.sh`       | the `coworld build` hook. Must stay **executable**.                                                                                                       |
+| `tools/ci/`                          | the CI harness: `docker_smoke.sh`, `viewer_smoke.mjs`, `renderer_fixture.html`, `policies.json`.                                                          |
 
 ## Building and testing
 
@@ -131,15 +134,15 @@ tools/build_replay_viewer.sh "$PWD/dist/static-replay-viewer"
 
 The tests are the design note's own enforcement:
 
-| test | what it pins |
-|---|---|
-| `tests/test_sim.nim` | every rule in the ten numbered steps, one at a time, plus cube conservation and determinism. |
-| `tests/test_baseline.nim` | bounded, legal orders over 12 seeds × 4 variants × 6 seat mixes, with the board invariants checked every tick. |
+| test                         | what it pins                                                                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `tests/test_sim.nim`         | every rule in the ten numbered steps, one at a time, plus cube conservation and determinism.                                         |
+| `tests/test_baseline.nim`    | bounded, legal orders over 12 seeds × 4 variants × 6 seat mixes, with the board invariants checked every tick.                       |
 | `tests/test_feasibility.nim` | the economy: gates (a)–(e). A constant change that breaks the dilemma fails **here**, with the repair ladder in the failure message. |
-| `tests/test_replay.nim` | an end-to-end episode, then a strict-UTF-8 re-read of the bytes — including full-cap multi-byte `say`/`notes`. |
-| `tests/test_llm.nim` | tolerant parsing, the retry, the fallback, and that **one batch carries every open seat**. |
-| `tests/test_manifest.nim` | the packaging contract, and that **every variant's `game_config` constructs a sim**. |
-| `tests/test_broadcast.nim` | the chrome frame's shape, the sprite-id audit, and a **scope-duplication** check over `chrome_common.js`'s alias list. |
+| `tests/test_replay.nim`      | an end-to-end episode, then a strict-UTF-8 re-read of the bytes — including full-cap multi-byte `say`/`notes`.                       |
+| `tests/test_llm.nim`         | tolerant parsing, the retry, the fallback, and that **one batch carries every open seat**.                                           |
+| `tests/test_manifest.nim`    | the packaging contract, and that **every variant's `game_config` constructs a sim**.                                                 |
+| `tests/test_broadcast.nim`   | the chrome frame's shape, the sprite-id audit, and a **scope-duplication** check over `chrome_common.js`'s alias list.               |
 
 ## Three constants differ from the design note
 
@@ -151,7 +154,7 @@ and `tools/tune/feasibility_sweep.nim` is the grid that chose them
 - **`moveCooldown` 2 → 1** (gate (a)). Rungs 1 and 2 do not move the binding
   constraint, which is the banana total: at `moveCooldown 2` gate (a) is 0/12 on
   every combination of the other four constants.
-- **`stripCapLoss` 12 → 16** (gate (c)). At 12 an all-stripper room *stalls*
+- **`stripCapLoss` 12 → 16** (gate (c)). At 12 an all-stripper room _stalls_
   rather than ruining the plant — 0/12 seeds end `factory_ruined` — because the
   note's own walk needs a repair between the sixth and seventh override and no
   stripper ever repairs. At 16 the plant scraps after **five** overrides rather
@@ -188,4 +191,5 @@ the lever, and a red `WHO BROKE IT — RATCHET · CAP 100 → 84` banner. Checke
 MIT. See [`LICENSE`](LICENSE).
 
 See [TRAINING.md](TRAINING.md) for prompt variants, private provenance, full text
-collection, and seeded teacher exports.
+collection, and historical scripted exports. Native model capture and its physical-family
+limitations are documented there.
