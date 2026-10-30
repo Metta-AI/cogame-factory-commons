@@ -26,7 +26,7 @@ type
     evidenceBytes: int
     errors: seq[string]
 
-proc scalarUtf8(text: string): bool =
+proc scalarUtf8*(text: string): bool =
   ## RFC 3629: Nim's validateUtf8 alone permits encoded surrogate code points.
   var index = 0
   while index < text.len:

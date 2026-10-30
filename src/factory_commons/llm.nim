@@ -692,6 +692,24 @@ proc parseOrder*(payload: JsonNode): Order =
   result = initOrder()
   if payload.isNil or payload.kind != JObject:
     raise newException(FactoryError, "reply is not a JSON object")
+  # Nim JSON strings can contain encoded surrogate code points or invalid UTF-8.
+  # Reject them before cleaning/installation, including ignored fields and keys.
+  # Valid strings and the tolerant JSON/enum/default behavior remain unchanged.
+  var pending = @[payload]
+  while pending.len > 0:
+    let node = pending.pop()
+    case node.kind
+    of JString:
+      if not scalarUtf8(node.getStr()):
+        raise newException(FactoryError, "reply contains non-Unicode text")
+    of JObject:
+      for key, value in node:
+        if not scalarUtf8(key):
+          raise newException(FactoryError, "reply contains a non-Unicode key")
+        pending.add(value)
+    of JArray:
+      for value in node: pending.add(value)
+    else: discard
   let jobNode = payload{"job"}
   if jobNode.isNil or jobNode.kind != JString:
     raise newException(FactoryError, "no job in reply")

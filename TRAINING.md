@@ -88,8 +88,7 @@ opponent actions and optional teacher labels. Metta recipe support is in
 
 Set `COGAME_SAVE_TRAJECTORY_URI` to a private, episode-scoped destination to
 collect decisions from the ordinary game server. The public player interface,
-standing-order parser, simultaneous three-seat views, physical kernel and clocks
-are unchanged. The private destination must differ from the public results and
+simultaneous three-seat views, physical kernel and clocks are unchanged. The private destination must differ from the public results and
 replay destinations. Without it, the capture path does no private projection or
 hashing.
 
@@ -102,14 +101,19 @@ The native parser remains tolerant, while learning eligibility requires strict
 JSON and unchanged supplied types and values. Supported fences and omitted native
 defaults can qualify; normalization, truncation, ignored fields, duplicate keys,
 nonfinite numbers, fallback and external actions cannot become selected model
-labels. Provider receipt verification remains a separate admission requirement. Recursive Unicode scalar checks also protect
-private JSONL when the unchanged native parser accepts an invalid string or key.
-Those rows retain their original native evidence serialization bytes as base64,
-with no selected attempt, no action target and no active attempts; actual
-fallbacks remain fallbacks. The episode is marked as an evidence failure. The
-native parser and public writer are unchanged, so malformed notebook bytes can
-still persist into a later native request or public replay; the fixture report
-keeps that runtime limitation separate from the capture safety result.
+labels. Provider receipt verification remains a separate admission requirement.
+
+The native standing-order parser rejects non-Unicode scalar strings or keys,
+including ignored fields, before installing an order. These replies follow the
+existing invalid-response retry and Steward fallback path; valid text, tolerant
+parsing, defaults and rune caps remain unchanged. Original received response
+bytes remain captured before rejection and are never repaired into labels.
+Recursive Unicode scalar checks separately protect private JSONL. If any native
+evidence cannot be represented there, its original serialization is retained as
+base64 with no selected attempt, no action target and no active attempts; actual
+fallbacks remain fallbacks. Such an episode is marked as an evidence failure.
+The mixed HTTP fixture requires subsequent requests and the public replay to
+remain Unicode scalar UTF-8 while retaining malformed response bytes privately.
 
 `notes` overwrites the prior notebook, including when omitted or empty. Frozen
 seat views contain only that seat's notebook, and per-seat execution metadata

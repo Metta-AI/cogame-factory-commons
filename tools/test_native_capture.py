@@ -278,7 +278,14 @@ def check_evidence(output, calls, mode):
     elif mode == "auth":
         assert len(calls) == 1 and statuses["fallback"] == 15
     elif mode == "mixed":
-        assert statuses.get("accepted") and statuses.get("rejected") and forensic
+        assert statuses.get("accepted") and statuses.get("rejected")
+        assert forensic == 0, "invalid orders entered native state before capture"
+        for row in decisions:
+            if row["decision_id"] in {
+                f"{shift}-{seat}" for shift in [5, 7] for seat in range(3)
+            }:
+                assert row["action_status"] == "fallback"
+                assert row["selected_attempt_id"] is None
     return {
         "decisions": len(decisions),
         "HTTP_attempts": len(seen),
@@ -456,10 +463,9 @@ def main():
                         ),
                     ][seat]
                 elif shift == 6:
-                    fixture_case = "persistent-invalid-request"
-                    assert raw is None, (
-                        "native bad notebook did not persist to next request"
-                    )
+                    fixture_case = "request-after-unicode-rejection"
+                    assert raw is not None, "invalid notebook escaped native rejection"
+                    json.dumps(body, ensure_ascii=False).encode("utf-8")
                 elif shift == 7:
                     fixture_case, text = [
                         ("escaped-low-key", '{"job":"operate","\\uDC00":"ignored"}'),
@@ -680,20 +686,18 @@ def main():
         for player in processes[1:]:
             assert player.wait(timeout=5) == 0
         results = json.loads((output / "results.json").read_text())
-        # Native replay serialization is unchanged. Preserve any pre-existing invalid
-        # notebook bytes explicitly; only private JSONL must remain scalar UTF-8.
-        replay_bytes = (output / "replay.json").read_bytes()
-        try:
-            replay_text = replay_bytes.decode("utf-8")
-            summary["public_replay_scalar_utf8"] = True
-        except UnicodeDecodeError:
-            assert args.mode == "mixed"
-            replay_text = replay_bytes.decode("utf-8", "surrogateescape")
-            summary["public_replay_scalar_utf8"] = False
-            summary["public_replay_encoding_gap"] = (
-                "Existing native writer preserved invalid notebook bytes; unchanged public runtime behavior."
+        # Invalid response bytes remain forensic evidence, never a standing order,
+        # next native request or public replay string.
+        for call in calls:
+            request = json.loads(
+                base64.b64decode(call["request_body_b64"]).decode("utf-8")
             )
-        replay = json.loads(replay_text)
+            json.dumps(request, ensure_ascii=False).encode("utf-8")
+        summary["native_requests_scalar_utf8"] = True
+        replay_bytes = (output / "replay.json").read_bytes()
+        replay = json.loads(replay_bytes.decode("utf-8"))
+        json.dumps(replay, ensure_ascii=False).encode("utf-8")
+        summary["public_replay_scalar_utf8"] = True
         assert results["reason"] == "complete" and results["shifts"] == 15
         assert len(replay["frames"]) == 900
         assert calls
